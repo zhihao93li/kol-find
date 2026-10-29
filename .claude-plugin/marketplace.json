@@ -1,0 +1,11 @@
+{
+  "name": "kol-find",
+  "owner": { "name": "zhihao93li" },
+  "plugins": [
+    {
+      "name": "kol-find",
+      "source": "./plugin",
+      "description": "找 KOL 和公开邮箱：Instagram、YouTube、TikTok，只返回名单（JSON / CSV）"
+    }
+  ]
+}
