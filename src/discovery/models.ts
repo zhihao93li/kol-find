@@ -4,7 +4,7 @@ export const PLATFORMS: Platform[] = ["instagram", "youtube", "tiktok"];
 /** Where an email was found, from most to least trustworthy. */
 export type EmailSource = "platform_field" | "bio" | "link_page" | "youtube_hidden";
 
-/** One creator as the discovery pipeline sees it, before it is saved to the database. */
+/** One creator as the discovery pipeline sees it. */
 export class Creator {
   profileUrl = "";
   name = "";
@@ -51,4 +51,10 @@ export class Creator {
 
 export function normalizeHandle(handle: string): string {
   return handle.trim().replace(/^@+/, "").toLowerCase();
+}
+
+/** "channel/<id>" for a youtube.com/channel/<id> link, else "". Channel ids are matched case-insensitively. */
+export function channelKey(url: string): string {
+  const m = (url || "").match(/youtube\.com\/channel\/([\w-]+)/i);
+  return m ? `channel/${m[1].toLowerCase()}` : "";
 }

@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ActorRunner, RunLedger, RunRecord } from "./discovery/apify.js";
-import { normalizeHandle, PLATFORMS, type EmailSource, type Platform } from "./discovery/models.js";
+import { channelKey, normalizeHandle, PLATFORMS, type EmailSource, type Platform } from "./discovery/models.js";
 import { DEFAULT_PARAMS, discover, type DiscoveryParams } from "./discovery/run.js";
 
 export interface SearchOpts {
@@ -56,6 +56,28 @@ export function jobDir(job: string): string {
   return join(home(), "jobs", job.replace(/[^\w一-鿿-]/g, "_"));
 }
 
+/**
+ * The ledger finds runs by step name only, so a job re-run with other search settings would quietly read the
+ * old results. Each job keeps the settings it first ran with, and a re-run with different ones is refused.
+ * The budget may change between runs (raising it is how a job that stopped early carries on).
+ */
+export function checkJob(dir: string, p: DiscoveryParams, save: boolean): void {
+  const { maxSpend: _, ...settings } = p;
+  const file = join(dir, "job.json");
+  if (existsSync(file)) {
+    const before: Record<string, unknown> = JSON.parse(readFileSync(file, "utf8"));
+    const changed = Object.keys({ ...before, ...settings })
+      .filter((k) => JSON.stringify(before[k]) !== JSON.stringify((settings as Record<string, unknown>)[k]));
+    if (changed.length) {
+      throw new Error(`这个 --job 之前用别的条件跑过（变了：${changed.join("、")}），续跑会拿回上次的结果。换一个 --job 名字，或者用原来的条件续跑`);
+    }
+    return;
+  }
+  if (!save) return;
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, JSON.stringify(settings, null, 2));
+}
+
 /** Remembers each Apify run of a job on disk, so re-running the same job reads finished runs instead of paying again. */
 export class FileLedger implements RunLedger {
   private file: string;
@@ -78,24 +100,40 @@ export class FileLedger implements RunLedger {
   }
 }
 
-/** APIFY_TOKEN, else ~/.kol-find/apify-token, else the token kolpick keeps on this computer. */
+/** APIFY_TOKEN, else ~/.kol-find/apify-token. */
 export function apifyToken(): string {
   if (process.env.APIFY_TOKEN) return process.env.APIFY_TOKEN;
   const file = join(home(), "apify-token");
   if (existsSync(file)) return readFileSync(file, "utf8").trim();
-  const kolpick = join(process.env.KOLPICK_HOME || join(homedir(), ".kolpick"), "config.json");
-  if (existsSync(kolpick)) {
-    const token = JSON.parse(readFileSync(kolpick, "utf8")).apifyToken;
-    if (token) return token;
-  }
   throw new Error(`没有 Apify token。把 token 存进 ${file}（只放在这台电脑上），或设置环境变量 APIFY_TOKEN`);
 }
 
-/** "@name", "name" or a profile link → the bare lowercase handle. */
+/**
+ * "@name", "name" or a profile link → the bare lowercase handle; "" when it can't be read.
+ * YouTube's older links: /channel/<id> becomes the key discover() also reads off a found channel's link,
+ * and /c/<name> or /user/<name> is taken as the handle, which YouTube made the same for most of them.
+ */
 export function handleOf(s: string): string {
   s = s.trim();
-  const m = s.match(/(?:instagram\.com|tiktok\.com|youtube\.com)\/@?([\w.-]+)/i);
-  return normalizeHandle(m ? m[1] : s.includes("/") ? "" : s);
+  const yt = s.match(/youtube\.com\/(channel|c|user)\/([^/?#\s\])]+)/i);
+  if (yt) return yt[1].toLowerCase() === "channel" ? channelKey(s) : normalizeHandle(decoded(yt[2]));
+  // YouTube handles can be Chinese, Thai and so on, raw or percent-encoded in the link.
+  const m = s.match(/(?:instagram\.com|tiktok\.com|youtube\.com)\/@?([^/?#\s\])]+)/i);
+  return normalizeHandle(m ? decoded(m[1]) : /[/\s]/.test(s) ? "" : s);
+}
+
+function decoded(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+/** Exclude entries that aren't a handle or profile link: how many, with a few to show. */
+export function unreadable(exclude: string[]) {
+  const bad = exclude.filter((s) => !handleOf(s));
+  return bad.length ? { count: bad.length, examples: bad.slice(0, 5) } : undefined;
 }
 
 export function params(o: SearchOpts): DiscoveryParams {
@@ -137,6 +175,8 @@ export async function search(run: ActorRunner & { spent?: number }, o: SearchOpt
     filtered,
     spentUsd: Number((run.spent ?? 0).toFixed(2)),
     stoppedEarly: result.stoppedEarly || undefined,
+    /** Nothing was skipped for these. */
+    excludeUnread: unreadable(o.exclude),
     people,
   };
 }
