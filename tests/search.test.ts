@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ActorKey, ActorRunner, Item } from "../src/discovery/apify.js";
 import { DEFAULT_PARAMS } from "../src/discovery/run.js";
-import { FileLedger, handleOf, params, search, toCsv, type SearchOpts } from "../src/search.js";
+import { checkJob, FileLedger, handleOf, params, search, toCsv, type SearchOpts } from "../src/search.js";
 
 class FakeApify implements ActorRunner {
   calls: [ActorKey, Item][] = [];
@@ -54,6 +54,34 @@ describe("kol-find", () => {
   it("reads handles from links and @names", () => {
     expect(["@Mama_A", "https://www.tiktok.com/@abc.def?lang=zh", "https://www.youtube.com/@Chan", "https://shop.tw/x"].map(handleOf))
       .toEqual(["mama_a", "abc.def", "chan", ""]);
+    expect(["https://www.youtube.com/channel/UCabc-12_x", "https://youtube.com/c/OldName/videos", "youtube.com/user/Legacy"].map(handleOf))
+      .toEqual(["channel/ucabc-12_x", "oldname", "legacy"]);
+    expect(["https://www.youtube.com/@%E6%87%B6%E6%95%A3%E6%97%A5%E8%A8%98", "https://www.youtube.com/@โรงละครช้าง",
+      "[https://www.instagram.com/yo790707/](https://www.instagram.com/yo790707/)", "https://www.youtube.com/@"].map(handleOf))
+      .toEqual(["懶散日記", "โรงละครช้าง", "yo790707", ""]);
+  });
+
+  it("skips YouTube channels excluded by their /channel/ link, and reports exclude entries it can't read", async () => {
+    const api = new FakeApify({
+      yt_search: [
+        { channel: { handle: "@keep", url: "https://www.youtube.com/@keep", title: "K", description: "k@k.tw" } },
+        { channel: { handle: "@gone", url: "https://www.youtube.com/channel/UCgone1", title: "G", description: "g@g.tw" } },
+      ],
+    });
+    const r = await search(api, { ...base, platform: "youtube", keywords: ["x"],
+      exclude: ["https://www.youtube.com/channel/UCgone1", "https://shop.tw/x"] });
+    expect(r.people.map((p) => p.handle)).toEqual(["@keep"]);
+    expect(r.excludeUnread).toEqual({ count: 1, examples: ["https://shop.tw/x"] });
+  });
+
+  it("refuses to resume a job with different search settings, but lets the budget change", () => {
+    const dir = join(mkdtempSync(join(tmpdir(), "kolfind-")), "job");
+    const p = params({ ...base, keywords: ["親子"] });
+    checkJob(dir, p, false);
+    checkJob(dir, { ...p, keywords: ["別的"] }, false); // a dry run saves nothing
+    checkJob(dir, p, true);
+    checkJob(dir, { ...p, maxSpend: 9 }, true);
+    expect(() => checkJob(dir, { ...p, keywords: ["育兒"], minFollowers: 1000 }, false)).toThrow("变了：keywords、minFollowers");
   });
 
   it("writes CSV that quotes commas and newlines", () => {

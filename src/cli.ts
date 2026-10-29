@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { ApifyRunner } from "./discovery/apify.js";
 import { DEFAULT_PARAMS } from "./discovery/run.js";
+import { readExclude } from "./exclude.js";
 import type { Platform } from "./discovery/models.js";
-import { apifyToken, FileLedger, jobDir, params, search, toCsv, type SearchOpts } from "./search.js";
+import { apifyToken, checkJob, FileLedger, jobDir, params, search, toCsv, unreadable, type SearchOpts } from "./search.js";
 
 const HELP = `kol-find search --platform instagram|youtube|tiktok [找法] [条件] [--budget 美元] [--job 名字] [--dry-run]
 
@@ -19,7 +20,8 @@ const HELP = `kol-find search --platform instagram|youtube|tiktok [找法] [条�
     --min-followers N --max-followers N
     --chinese-only          只要名称或简介里有中文（且没有日文假名）的
     --exclude a,b           跳过这些账号（账号或主页链接），不再花钱查
-    --exclude-file 文件      同上，文件里一行一个，或一个 JSON 数组
+    --exclude-file 文件      同上，从文件读：一行一个的名单、任何表格导出的 CSV / TSV、或 JSON 都行；
+                            每一格里的 @账号 和平台主页链接都会被认出来，其他列不管
     --youtube-hidden        YouTube：前面都没查到邮箱的，再查隐藏商务邮箱（找到一个约 12 美分）
     --no-link-pages         不跟简介外链找邮箱
     --country TW --language zh
@@ -29,7 +31,7 @@ const HELP = `kol-find search --platform instagram|youtube|tiktok [找法] [条�
   --dry-run                 只检查参数，不花钱
 
   结果在 ~/.kol-find/jobs/<名字>/：people.json（完整名单）和 people.csv。
-  Apify token：环境变量 APIFY_TOKEN，或 ~/.kol-find/apify-token，或 kolpick 在这台电脑上存的那个。`;
+  Apify token：环境变量 APIFY_TOKEN，或 ~/.kol-find/apify-token。`;
 
 function list(v: unknown): string[] {
   return typeof v === "string" ? v.split(/[,，]/).map((s) => s.trim()).filter(Boolean) : [];
@@ -44,9 +46,12 @@ function num(v: unknown): number | null {
 
 function excludeFile(file: string): string[] {
   if (!existsSync(file)) throw new Error(`找不到 --exclude-file：${file}`);
-  const text = readFileSync(file, "utf8").trim();
-  if (text.startsWith("[")) return (JSON.parse(text) as unknown[]).map(String);
-  return text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  const bytes = readFileSync(file);
+  // .xlsx and .numbers files are zip archives.
+  if (bytes.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
+    throw new Error("--exclude-file 读不了 Excel / Numbers 文件，请先导出成 CSV");
+  }
+  return readExclude(bytes.toString("utf8"));
 }
 
 async function main(argv: string[]) {
@@ -75,9 +80,11 @@ async function main(argv: string[]) {
   const p = params(o);
   const job = v.job || `${o.platform}-${new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-")}`;
   const dir = jobDir(job);
+  checkJob(dir, p, !v["dry-run"]);
   if (v["dry-run"]) {
     const { maxSpend, ...rest } = p;
     console.log(JSON.stringify({ 试跑: true, job, 参数: rest, 跳过账号: o.exclude.length,
+      认不出的跳过项: unreadable(o.exclude),
       说明: `正式运行最多花 $${maxSpend}，到上限就停，已找到的照样返回；结果写到 ${dir}` }, null, 2));
     return;
   }

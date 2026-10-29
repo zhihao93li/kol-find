@@ -1,6 +1,6 @@
 import { BudgetExceeded, type ActorRunner } from "./apify.js";
 import { keep, type FilterOptions } from "./filters.js";
-import { Creator, normalizeHandle, type Platform } from "./models.js";
+import { channelKey, Creator, normalizeHandle, type Platform } from "./models.js";
 import * as pipeline from "./pipeline.js";
 
 export interface DiscoveryParams extends FilterOptions {
@@ -32,12 +32,13 @@ export interface DiscoveryResult {
 }
 
 /**
- * Run discovery and email lookup for one platform. `skip` holds handles not worth paying to look up
- * again (already in this project); they are dropped before any lookup step.
+ * Run discovery and email lookup for one platform. `skip` holds handles (or YouTube channelKey()s) not worth paying to look up
+ * again (the caller already has them); they are dropped before any lookup step.
  */
 export async function discover(api: ActorRunner, p: DiscoveryParams, skip: Set<string> = new Set()): Promise<DiscoveryResult> {
   const given = p.handles.filter(Boolean).map((h) => new Creator(p.platform, h, { discoveredBy: "input" }));
-  const drop = (cs: Creator[]) => pipeline.dedupe(cs).filter((c) => !skip.has(normalizeHandle(c.handle)));
+  const skipped = (c: Creator) => skip.has(normalizeHandle(c.handle)) || skip.has(channelKey(c.profileUrl));
+  const drop = (cs: Creator[]) => pipeline.dedupe(cs).filter((c) => !skipped(c));
   const kept = (cs: Creator[]) => cs.filter((c) => keep(c, p)[0]);
 
   let creators: Creator[] = [];

@@ -18599,7 +18599,7 @@ var require_axios = __commonJS({
       if (last < 1 || value.charCodeAt(0) !== 34 || value.charCodeAt(last) !== 34) {
         return value;
       }
-      let decoded = "";
+      let decoded2 = "";
       for (let i = 1; i < last; i++) {
         const code = value.charCodeAt(i);
         if (code === 34) {
@@ -18611,9 +18611,9 @@ var require_axios = __commonJS({
             return value;
           }
         }
-        decoded += value[i];
+        decoded2 += value[i];
       }
-      return decoded;
+      return decoded2;
     }
     function parseParameters(value) {
       const parameters = /* @__PURE__ */ Object.create(null);
@@ -60244,6 +60244,10 @@ var Creator = class {
 function normalizeHandle(handle) {
   return handle.trim().replace(/^@+/, "").toLowerCase();
 }
+function channelKey(url) {
+  const m = (url || "").match(/youtube\.com\/channel\/([\w-]+)/i);
+  return m ? `channel/${m[1].toLowerCase()}` : "";
+}
 
 // src/discovery/emails.ts
 var EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}/g;
@@ -60574,7 +60578,8 @@ var DEFAULT_PARAMS = {
 };
 async function discover(api, p, skip = /* @__PURE__ */ new Set()) {
   const given = p.handles.filter(Boolean).map((h) => new Creator(p.platform, h, { discoveredBy: "input" }));
-  const drop = (cs) => dedupe(cs).filter((c) => !skip.has(normalizeHandle(c.handle)));
+  const skipped = (c) => skip.has(normalizeHandle(c.handle)) || skip.has(channelKey(c.profileUrl));
+  const drop = (cs) => dedupe(cs).filter((c) => !skipped(c));
   const kept = (cs) => cs.filter((c) => keep(c, p)[0]);
   let creators = [];
   let stoppedEarly = "";
@@ -60623,6 +60628,21 @@ function home() {
 function jobDir(job) {
   return join(home(), "jobs", job.replace(/[^\w一-鿿-]/g, "_"));
 }
+function checkJob(dir, p, save) {
+  const { maxSpend: _, ...settings } = p;
+  const file = join(dir, "job.json");
+  if (existsSync(file)) {
+    const before = JSON.parse(readFileSync(file, "utf8"));
+    const changed = Object.keys({ ...before, ...settings }).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(settings[k]));
+    if (changed.length) {
+      throw new Error(`\u8FD9\u4E2A --job \u4E4B\u524D\u7528\u522B\u7684\u6761\u4EF6\u8DD1\u8FC7\uFF08\u53D8\u4E86\uFF1A${changed.join("\u3001")}\uFF09\uFF0C\u7EED\u8DD1\u4F1A\u62FF\u56DE\u4E0A\u6B21\u7684\u7ED3\u679C\u3002\u6362\u4E00\u4E2A --job \u540D\u5B57\uFF0C\u6216\u8005\u7528\u539F\u6765\u7684\u6761\u4EF6\u7EED\u8DD1`);
+    }
+    return;
+  }
+  if (!save) return;
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, JSON.stringify(settings, null, 2));
+}
 var FileLedger = class {
   file;
   data;
@@ -60647,17 +60667,25 @@ function apifyToken() {
   if (process.env.APIFY_TOKEN) return process.env.APIFY_TOKEN;
   const file = join(home(), "apify-token");
   if (existsSync(file)) return readFileSync(file, "utf8").trim();
-  const kolpick = join(process.env.KOLPICK_HOME || join(homedir(), ".kolpick"), "config.json");
-  if (existsSync(kolpick)) {
-    const token = JSON.parse(readFileSync(kolpick, "utf8")).apifyToken;
-    if (token) return token;
-  }
   throw new Error(`\u6CA1\u6709 Apify token\u3002\u628A token \u5B58\u8FDB ${file}\uFF08\u53EA\u653E\u5728\u8FD9\u53F0\u7535\u8111\u4E0A\uFF09\uFF0C\u6216\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF APIFY_TOKEN`);
 }
 function handleOf(s) {
   s = s.trim();
-  const m = s.match(/(?:instagram\.com|tiktok\.com|youtube\.com)\/@?([\w.-]+)/i);
-  return normalizeHandle(m ? m[1] : s.includes("/") ? "" : s);
+  const yt = s.match(/youtube\.com\/(channel|c|user)\/([^/?#\s\])]+)/i);
+  if (yt) return yt[1].toLowerCase() === "channel" ? channelKey(s) : normalizeHandle(decoded(yt[2]));
+  const m = s.match(/(?:instagram\.com|tiktok\.com|youtube\.com)\/@?([^/?#\s\])]+)/i);
+  return normalizeHandle(m ? decoded(m[1]) : /[/\s]/.test(s) ? "" : s);
+}
+function decoded(s) {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+function unreadable(exclude) {
+  const bad = exclude.filter((s) => !handleOf(s));
+  return bad.length ? { count: bad.length, examples: bad.slice(0, 5) } : void 0;
 }
 function params(o) {
   if (!PLATFORMS.includes(o.platform)) throw new Error(`--platform \u53EA\u80FD\u662F ${PLATFORMS.join("\u3001")}`);
@@ -60715,6 +60743,8 @@ async function search(run, o) {
     filtered,
     spentUsd: Number((run.spent ?? 0).toFixed(2)),
     stoppedEarly: result.stoppedEarly || void 0,
+    /** Nothing was skipped for these. */
+    excludeUnread: unreadable(o.exclude),
     people
   };
 }
@@ -60733,13 +60763,96 @@ var COLUMNS = [
   ["\u7B80\u4ECB", (p) => p.bio]
 ];
 function toCsv(people) {
-  const cell = (v) => {
+  const cell2 = (v) => {
     const s = String(v ?? "");
     return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
   };
-  const lines = [COLUMNS.map(([h]) => h).join(","), ...people.map((p) => COLUMNS.map(([, f]) => cell(f(p))).join(","))];
+  const lines = [COLUMNS.map(([h]) => h).join(","), ...people.map((p) => COLUMNS.map(([, f]) => cell2(f(p))).join(","))];
   return `\uFEFF${lines.join("\r\n")}\r
 `;
+}
+
+// src/exclude.ts
+var PROFILE_LINK = /^(?:https?:\/\/)?(?:[\w-]+\.)*(?:instagram\.com|youtube\.com|tiktok\.com)\//i;
+var BARE_HANDLE = /^[\p{L}\p{N}._-]+$/u;
+function unlink(s) {
+  const m = s.match(/^\[[^\]]*\]\(([^)]*)\)$/);
+  return m ? m[1] : s;
+}
+var CHANNEL_ID = /^UC[\w-]{22}$/;
+var ACCOUNT_HEADER = /账号|帳號|账户|帳戶|handle|user ?name|account|instagram|youtube|tiktok|^ig$|^yt$|频道|頻道/i;
+var NOT_ACCOUNT_HEADER = /名称|名稱|昵称|暱稱|显示|顯示|display/i;
+function account(token) {
+  token = unlink(token.trim());
+  if (CHANNEL_ID.test(token)) return `https://www.youtube.com/channel/${token}`;
+  if (token.startsWith("@") || PROFILE_LINK.test(token)) return handleOf(token) ? token : "";
+  return "";
+}
+function cell(text, bare, keep2) {
+  text = text.trim();
+  if (!text) return [];
+  if (bare && BARE_HANDLE.test(text) && !CHANNEL_ID.test(text)) return [text];
+  const found = text.split(/[\s,，、;；：|]+/).map(account).filter(Boolean);
+  return found.length || !keep2 ? found : [text];
+}
+function rows(text) {
+  const firstLine = text.slice(0, text.indexOf("\n") + 1 || void 0);
+  const delim = firstLine.includes("	") && !firstLine.includes(",") ? "	" : ",";
+  const out = [];
+  let row = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') cur += text[++i];
+      else if (ch === '"') quoted = false;
+      else cur += ch;
+    } else if (ch === '"' && cur === "") quoted = true;
+    else if (ch === delim) {
+      row.push(cur);
+      cur = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(cur);
+      out.push(row);
+      row = [];
+      cur = "";
+    } else cur += ch;
+  }
+  if (cur || row.length) out.push([...row, cur]);
+  return out;
+}
+function strings(v, out = []) {
+  if (typeof v === "string") out.push(v);
+  else if (Array.isArray(v)) v.forEach((x) => strings(x, out));
+  else if (v && typeof v === "object") Object.values(v).forEach((x) => strings(x, out));
+  return out;
+}
+function readExclude(text) {
+  text = text.replace(/^﻿/, "").trim();
+  if (text.startsWith("[") || text.startsWith("{")) {
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = void 0;
+    }
+    if (json !== void 0) {
+      if (Array.isArray(json) && json.every((x) => typeof x === "string")) return json.flatMap((s) => cell(s, true, true));
+      return strings(json).flatMap((s) => cell(s, false, false));
+    }
+  }
+  const table = rows(text);
+  const body = table.slice(1);
+  const accountColumn = (i) => {
+    const header = (table[0]?.[i] ?? "").trim();
+    if (ACCOUNT_HEADER.test(header) && !NOT_ACCOUNT_HEADER.test(header)) return true;
+    const filled = body.map((r) => (r[i] ?? "").trim()).filter(Boolean);
+    return filled.filter((c) => cell(c, false, false).length).length * 2 > filled.length;
+  };
+  const accountColumns = new Set([...Array(Math.max(0, ...table.map((r) => r.length))).keys()].filter(accountColumn));
+  return table.flatMap((r) => r.flatMap((c, i) => cell(c, r.length === 1 || r !== table[0] && accountColumns.has(i), r.length === 1)));
 }
 
 // src/cli.ts
@@ -60756,7 +60869,8 @@ var HELP = `kol-find search --platform instagram|youtube|tiktok [\u627E\u6CD5] [
     --min-followers N --max-followers N
     --chinese-only          \u53EA\u8981\u540D\u79F0\u6216\u7B80\u4ECB\u91CC\u6709\u4E2D\u6587\uFF08\u4E14\u6CA1\u6709\u65E5\u6587\u5047\u540D\uFF09\u7684
     --exclude a,b           \u8DF3\u8FC7\u8FD9\u4E9B\u8D26\u53F7\uFF08\u8D26\u53F7\u6216\u4E3B\u9875\u94FE\u63A5\uFF09\uFF0C\u4E0D\u518D\u82B1\u94B1\u67E5
-    --exclude-file \u6587\u4EF6      \u540C\u4E0A\uFF0C\u6587\u4EF6\u91CC\u4E00\u884C\u4E00\u4E2A\uFF0C\u6216\u4E00\u4E2A JSON \u6570\u7EC4
+    --exclude-file \u6587\u4EF6      \u540C\u4E0A\uFF0C\u4ECE\u6587\u4EF6\u8BFB\uFF1A\u4E00\u884C\u4E00\u4E2A\u7684\u540D\u5355\u3001\u4EFB\u4F55\u8868\u683C\u5BFC\u51FA\u7684 CSV / TSV\u3001\u6216 JSON \u90FD\u884C\uFF1B
+                            \u6BCF\u4E00\u683C\u91CC\u7684 @\u8D26\u53F7 \u548C\u5E73\u53F0\u4E3B\u9875\u94FE\u63A5\u90FD\u4F1A\u88AB\u8BA4\u51FA\u6765\uFF0C\u5176\u4ED6\u5217\u4E0D\u7BA1
     --youtube-hidden        YouTube\uFF1A\u524D\u9762\u90FD\u6CA1\u67E5\u5230\u90AE\u7BB1\u7684\uFF0C\u518D\u67E5\u9690\u85CF\u5546\u52A1\u90AE\u7BB1\uFF08\u627E\u5230\u4E00\u4E2A\u7EA6 12 \u7F8E\u5206\uFF09
     --no-link-pages         \u4E0D\u8DDF\u7B80\u4ECB\u5916\u94FE\u627E\u90AE\u7BB1
     --country TW --language zh
@@ -60766,7 +60880,7 @@ var HELP = `kol-find search --platform instagram|youtube|tiktok [\u627E\u6CD5] [
   --dry-run                 \u53EA\u68C0\u67E5\u53C2\u6570\uFF0C\u4E0D\u82B1\u94B1
 
   \u7ED3\u679C\u5728 ~/.kol-find/jobs/<\u540D\u5B57>/\uFF1Apeople.json\uFF08\u5B8C\u6574\u540D\u5355\uFF09\u548C people.csv\u3002
-  Apify token\uFF1A\u73AF\u5883\u53D8\u91CF APIFY_TOKEN\uFF0C\u6216 ~/.kol-find/apify-token\uFF0C\u6216 kolpick \u5728\u8FD9\u53F0\u7535\u8111\u4E0A\u5B58\u7684\u90A3\u4E2A\u3002`;
+  Apify token\uFF1A\u73AF\u5883\u53D8\u91CF APIFY_TOKEN\uFF0C\u6216 ~/.kol-find/apify-token\u3002`;
 function list(v) {
   return typeof v === "string" ? v.split(/[,，]/).map((s) => s.trim()).filter(Boolean) : [];
 }
@@ -60778,9 +60892,11 @@ function num(v) {
 }
 function excludeFile(file) {
   if (!existsSync2(file)) throw new Error(`\u627E\u4E0D\u5230 --exclude-file\uFF1A${file}`);
-  const text = readFileSync2(file, "utf8").trim();
-  if (text.startsWith("[")) return JSON.parse(text).map(String);
-  return text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  const bytes = readFileSync2(file);
+  if (bytes.subarray(0, 4).equals(Buffer.from([80, 75, 3, 4]))) {
+    throw new Error("--exclude-file \u8BFB\u4E0D\u4E86 Excel / Numbers \u6587\u4EF6\uFF0C\u8BF7\u5148\u5BFC\u51FA\u6210 CSV");
+  }
+  return readExclude(bytes.toString("utf8"));
 }
 async function main(argv) {
   const { values: v, positionals } = parseArgs({
@@ -60830,6 +60946,7 @@ async function main(argv) {
   const p = params(o);
   const job = v.job || `${o.platform}-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-")}`;
   const dir = jobDir(job);
+  checkJob(dir, p, !v["dry-run"]);
   if (v["dry-run"]) {
     const { maxSpend, ...rest } = p;
     console.log(JSON.stringify({
@@ -60837,6 +60954,7 @@ async function main(argv) {
       job,
       \u53C2\u6570: rest,
       \u8DF3\u8FC7\u8D26\u53F7: o.exclude.length,
+      \u8BA4\u4E0D\u51FA\u7684\u8DF3\u8FC7\u9879: unreadable(o.exclude),
       \u8BF4\u660E: `\u6B63\u5F0F\u8FD0\u884C\u6700\u591A\u82B1 $${maxSpend}\uFF0C\u5230\u4E0A\u9650\u5C31\u505C\uFF0C\u5DF2\u627E\u5230\u7684\u7167\u6837\u8FD4\u56DE\uFF1B\u7ED3\u679C\u5199\u5230 ${dir}`
     }, null, 2));
     return;

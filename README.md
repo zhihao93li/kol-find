@@ -21,7 +21,7 @@
 
 - **直接用**（Node 20 以上）：`node plugin/skills/kol-find/scripts/kol-find.mjs --help`
 
-Apify token 只存在本机：环境变量 `APIFY_TOKEN`，或 `~/.kol-find/apify-token`，或 kolpick 存在 `~/.kolpick/config.json` 里的那个。
+Apify token 只存在本机：环境变量 `APIFY_TOKEN`，或 `~/.kol-find/apify-token`。
 
 ## 用法
 
@@ -31,14 +31,24 @@ kol-find search --platform instagram --keywords 親子,育兒 --min-followers 50
 
 - 去掉 `--dry-run` 才真的跑；到 `--budget`（美元，默认 2）就停，已找到的照样返回。
 - 结果在 `~/.kol-find/jobs/<名字>/`：`people.json`（完整名单）和 `people.csv`（`KOL_FIND_HOME` 可改位置）。
-- 中途断了用同一个 `--job` 重跑，已完成的 Apify 步骤不再花钱。
+- 中途断了用同一个 `--job` 重跑，已完成的 Apify 步骤不再花钱。续跑只能改预算，条件变了会被拒绝，换个名字重新跑。
 - 已有的人用 `--exclude` / `--exclude-file` 传进去，不再花钱查。
+
+### 跳过已有的人
+
+名单在哪都行，导成文件传给 `--exclude-file`：
+
+- 一行一个账号（`@name` 或 `name`）或主页链接；
+- 任何表格（Excel、Numbers、Google Sheets、飞书多维表格……）导出的 CSV / TSV，不用挑列；
+- JSON，包括数据接口直接返回的那种。
+
+每一格里的 `@账号`、Instagram / YouTube / TikTok 主页链接和 YouTube 频道 ID 都会被认出来，一格有几个也行；名字、邮箱、备注这些列不管。账号列不带 `@` 也行：表头写着「账号」「handle」「username」这类，或者这一列大部分是账号，就整列都当账号读。Excel、Numbers 文件要先导出成 CSV。试跑输出的「认不出的跳过项」是名单里读不出账号的行，这些不会被跳过。
 
 全部选项见 `--help`，agent 怎么用见 [plugin/skills/kol-find/SKILL.md](plugin/skills/kol-find/SKILL.md)。
 
 ## 为什么这样找
 
-各平台用哪些 actor、按什么顺序查邮箱、实测命中率和成本，见 kolpick 的 [design.md「找人和查邮箱」](https://github.com/zhihao93li/kolpick/blob/main/docs/design.md#八找人和查邮箱)。actor 和单价以 [src/discovery/apify.ts](src/discovery/apify.ts) 为准。kolpick 里暂时还有一份同样的找人代码（`src/discovery/`），改了这边要记得那边。
+各平台按什么顺序查邮箱见 [src/discovery/pipeline.ts](src/discovery/pipeline.ts) 开头的说明（按 2026-10-20 对 150 个 KOL 的实测定的），用哪些 actor 和单价以 [src/discovery/apify.ts](src/discovery/apify.ts) 为准。
 
 ## 开发
 
