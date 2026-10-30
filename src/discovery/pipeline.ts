@@ -9,7 +9,7 @@
 
 import * as emails from "./emails.js";
 import type { ActorRunner, Item } from "./apify.js";
-import { Creator, normalizeHandle } from "./models.js";
+import { Creator, normalizeHandle, type RecentPost } from "./models.js";
 
 // Link-in-bio targets that never carry a contact email (social sites, chat apps, shops).
 const SKIP_LINK_DOMAINS = [
@@ -46,7 +46,8 @@ export function merge(pool: Map<string, Creator>, c: Creator): void {
   for (const attr of ["profileUrl", "name", "bio", "externalUrl"] as const) {
     if (!existing[attr] && c[attr]) existing[attr] = c[attr];
   }
-  for (const attr of ["followers", "isBusiness", "isPrivate"] as const) {
+  if (!existing.lastPostAt && c.lastPostAt) existing.lastPostAt = c.lastPostAt;
+  for (const attr of ["followers", "isBusiness", "isPrivate", "postsCount", "avgLikes", "avgComments", "avgViews"] as const) {
     if (existing[attr] === null && c[attr] !== null) (existing as any)[attr] = c[attr];
   }
   for (const e of c.emails) existing.addEmail(e.email, e.source);
@@ -79,11 +80,16 @@ export async function igDiscover(api: ActorRunner, seeds: string[], keywords: st
                                 keywords.length * perKeyword);
     for (const it of items) {
       const handle = it.username || "";
-      merge(pool, new Creator("instagram", handle, {
+      const c = new Creator("instagram", handle, {
         profileUrl: `https://www.instagram.com/${handle}/`, name: it.fullName || "",
         followers: toInt(it.followersCount), isBusiness: it.isBusinessAccount ?? null, isPrivate: it.private ?? null,
         bio: it.biography || "", externalUrl: it.externalUrl || "", discoveredBy: `search:${it.searchTerm ?? ""}`,
-      }));
+        postsCount: toInt(it.postsCount),
+      });
+      c.setPosts((it.latestPosts || []).map((p: Item) => ({
+        time: p.timestamp || "", likes: toInt(p.likesCount), comments: toInt(p.commentsCount), views: toInt(p.videoViewCount),
+      })));
+      merge(pool, c);
     }
   }
   return [...pool.values()];
@@ -103,6 +109,7 @@ export async function igLookup(api: ActorRunner, creators: Creator[]): Promise<v
       continue;
     }
     if (it.follower_count !== null && it.follower_count !== undefined) c.followers = toInt(it.follower_count);
+    c.postsCount = toInt(it.total_posts) ?? c.postsCount;
     c.isBusiness = it.is_business ?? c.isBusiness;
     c.isPrivate = it.is_private ?? c.isPrivate;
     c.name = it.full_name || c.name;
@@ -175,8 +182,11 @@ export async function ytDiscover(api: ActorRunner, keywords: string[], perKeywor
     const c = new Creator("youtube", get(it, "channel.handle") || "", {
       profileUrl: get(it, "channel.url") || "", name: get(it, "channel.title") || "",
       followers: toInt(get(it, "metrics.subscribers")), bio: get(it, "channel.description") || "",
-      discoveredBy: `search:${get(it, "discoverySource.value") ?? ""}`,
+      discoveredBy: `search:${get(it, "discoverySource.value") ?? ""}`, postsCount: toInt(get(it, "metrics.videos")),
     });
+    // The search gives no recent videos, only lifetime totals.
+    const views = toInt(get(it, "metrics.totalViews"));
+    if (views != null && c.postsCount) c.avgViews = Math.round(views / c.postsCount);
     const links = get(it, "profile.externalLinks") || [];
     if (links.length) c.externalUrl = typeof links[0] === "object" ? links[0].url || "" : String(links[0]);
     for (const e of [...emails.splitField(get(it, "profile.emails")), ...emails.extract(c.bio)]) c.addEmail(e, "bio");
@@ -225,6 +235,7 @@ function ttCreator(meta: Item, discoveredBy: string): Creator {
   const c = new Creator("tiktok", handle, {
     profileUrl: `https://www.tiktok.com/@${handle}`, name: meta.nickName || "", followers: toInt(meta.fans),
     isPrivate: meta.privateAccount ?? null, bio: meta.signature || "", externalUrl: meta.bioLink || "", discoveredBy,
+    postsCount: toInt(meta.video),
   });
   for (const e of emails.extract(c.bio)) c.addEmail(e, "bio");
   return c;
@@ -241,15 +252,26 @@ export async function ttDiscover(api: ActorRunner, keywords: string[], perKeywor
   return [...pool.values()];
 }
 
+/** Videos read per TikTok profile: up to three can be pinned on top, so four reach at least one recent one. */
+export const TT_POSTS_PER_PROFILE = 4;
+
 export async function ttLookup(api: ActorRunner, creators: Creator[]): Promise<void> {
   const todo = creators.filter((c) => !c.bio && !c.email);
   if (!todo.length) return;
-  const items = await api.run("tt_profile", { profiles: todo.map((c) => normalizeHandle(c.handle)), resultsPerPage: 1 },
-                              todo.length);
+  const items = await api.run("tt_profile", { profiles: todo.map((c) => normalizeHandle(c.handle)), resultsPerPage: TT_POSTS_PER_PROFILE },
+                              todo.length * TT_POSTS_PER_PROFILE);
+  // One row per video; each carries its author.
   const byHandle = new Map<string, Item>();
+  const posts = new Map<string, RecentPost[]>();
   for (const it of items) {
     const meta = it.authorMeta || {};
-    if (meta.name && !byHandle.has(normalizeHandle(meta.name))) byHandle.set(normalizeHandle(meta.name), meta);
+    if (!meta.name) continue;
+    const key = normalizeHandle(meta.name);
+    if (!byHandle.has(key)) byHandle.set(key, meta);
+    if (it.createTimeISO) {
+      posts.set(key, [...(posts.get(key) ?? []), { time: it.createTimeISO, likes: toInt(it.diggCount),
+        comments: toInt(it.commentCount), views: toInt(it.playCount), pinned: !!it.isPinned }]);
+    }
   }
   for (const c of todo) {
     const meta = byHandle.get(normalizeHandle(c.handle));
@@ -260,6 +282,8 @@ export async function ttLookup(api: ActorRunner, creators: Creator[]): Promise<v
     c.isPrivate = fresh.isPrivate;
     c.bio = fresh.bio;
     c.externalUrl = fresh.externalUrl;
+    c.postsCount = fresh.postsCount;
+    c.setPosts(posts.get(normalizeHandle(c.handle)) ?? []);
     for (const e of fresh.emails) c.addEmail(e.email, "bio");
   }
 }

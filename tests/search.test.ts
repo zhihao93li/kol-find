@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ActorKey, ActorRunner, Item } from "../src/discovery/apify.js";
 import { DEFAULT_PARAMS } from "../src/discovery/run.js";
+import type { DomainCheck } from "../src/mailcheck.js";
 import { checkJob, FileLedger, handleOf, params, search, toCsv, type SearchOpts } from "../src/search.js";
 
 class FakeApify implements ActorRunner {
@@ -16,9 +17,12 @@ class FakeApify implements ActorRunner {
   }
 }
 
+/** Every domain takes mail, except ones named "dead". */
+const okMail: DomainCheck = async (d) => (d.startsWith("dead") ? "no_mail_server" : "ok");
+
 const base: SearchOpts = {
   platform: "instagram", keywords: [], seeds: [], handles: [], exclude: [], target: null,
-  minFollowers: null, maxFollowers: null, chineseOnly: false, linkPages: false, youtubeHidden: false,
+  minFollowers: null, maxFollowers: null, chineseOnly: false, script: null, linkPages: false, youtubeHidden: false,
   country: DEFAULT_PARAMS.country, language: DEFAULT_PARAMS.language, budget: 2,
 };
 
@@ -35,12 +39,30 @@ describe("kol-find", () => {
         { username: "tiny", public_email: "t@x.tw", follower_count: 300 },
       ],
     });
-    const r = await search(api, { ...base, keywords: ["親子"], minFollowers: 1000, exclude: ["https://www.instagram.com/known_one/"] });
+    const r = await search(api, { ...base, keywords: ["親子"], minFollowers: 1000, exclude: ["https://www.instagram.com/known_one/"] }, okMail);
     expect(api.calls.find(([k]) => k === "ig_email")![1].instagram_ids).toEqual(["mama_a", "tiny"]);
     expect(r.people).toEqual([expect.objectContaining({
       handle: "mama_a", email: "a@mama.tw", emailSource: "platform_field", otherEmails: ["b@mama.tw"], followers: 20000, foundBy: "search:親子",
     })]);
-    expect(r).toMatchObject({ found: 1, withEmail: 1, filtered: { below_min_followers: 1 }, spentUsd: 0.42 });
+    expect(r).toMatchObject({ found: 1, withEmail: 1, filtered: { below_min_followers: 1 }, spentUsd: 0.42, costPerEmailUsd: 0.42 });
+  });
+
+  it("leads with an email whose domain takes mail, and marks emails several accounts share", async () => {
+    const api = new FakeApify({
+      ig_search: [{ username: "a" }, { username: "b" }, { username: "c" }],
+      ig_email: [
+        { username: "a", public_email: "a@dead.tw", biography: "或 a@live.tw" },
+        { username: "b", public_email: "team@agency.tw" },
+        { username: "c", public_email: "TEAM@agency.tw", biography: "only c@dead.tw too" },
+      ],
+    });
+    const r = await search(api, { ...base, keywords: ["x"] }, okMail);
+    expect(r.people.map((p) => [p.handle, p.email, p.emailCheck, p.otherEmails, p.sharedWith])).toEqual([
+      ["a", "a@live.tw", "ok", ["a@dead.tw"], []],
+      ["b", "team@agency.tw", "ok", [], ["c"]],
+      ["c", "TEAM@agency.tw", "ok", ["c@dead.tw"], ["b"]],
+    ]);
+    expect(r).toMatchObject({ withEmail: 3, sharedEmails: 1, emailNoMailServer: undefined, costPerEmailUsd: 0.14 });
   });
 
   it("shares a target over keywords and seeds, and refuses what can't run", () => {
@@ -69,7 +91,7 @@ describe("kol-find", () => {
       ],
     });
     const r = await search(api, { ...base, platform: "youtube", keywords: ["x"],
-      exclude: ["https://www.youtube.com/channel/UCgone1", "https://shop.tw/x"] });
+      exclude: ["https://www.youtube.com/channel/UCgone1", "https://shop.tw/x"] }, okMail);
     expect(r.people.map((p) => p.handle)).toEqual(["@keep"]);
     expect(r.excludeUnread).toEqual({ count: 1, examples: ["https://shop.tw/x"] });
   });
@@ -86,9 +108,10 @@ describe("kol-find", () => {
 
   it("writes CSV that quotes commas and newlines", () => {
     const csv = toCsv([{ platform: "instagram", handle: "a", name: "A, B", url: "u", followers: null, isBusiness: true, email: "a@b.tw",
-      emailSource: "bio", otherEmails: ["c@d.tw", "e@f.tw"], externalUrl: "", bio: "第一行\n第二行", foundBy: "input" }]);
+      emailSource: "bio", emailCheck: "ok", sharedWith: ["x", "y"], otherEmails: ["c@d.tw", "e@f.tw"], postsCount: 120, lastPostAt: "2026-10-01T08:00:00.000Z", avgLikes: 300, avgComments: 12, avgViews: null,
+      engagementRate: 0.0312, externalUrl: "", bio: "第一行\n第二行", script: "traditional", foundBy: "input" }]);
     expect(csv.startsWith("﻿平台,账号,名称")).toBe(true);
-    expect(csv).toContain('instagram,a,"A, B",u,,a@b.tw,"c@d.tw, e@f.tw",bio,是,,input,"第一行\n第二行"');
+    expect(csv).toContain('instagram,a,"A, B",u,,a@b.tw,"c@d.tw, e@f.tw",bio,ok,"x, y",是,120,2026-10-01,300,12,,3.12%,,繁体,input,"第一行\n第二行"');
   });
 
   it("remembers Apify runs on disk for a re-run of the same job", async () => {

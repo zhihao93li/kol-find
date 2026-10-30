@@ -15557,7 +15557,7 @@ var require_get_intrinsic = __commonJS({
     var max = require_max();
     var min = require_min();
     var pow = require_pow();
-    var round = require_round();
+    var round2 = require_round();
     var sign = require_sign();
     var $Function = Function;
     var getEvalledConstructor = function(expressionSyntax) {
@@ -15671,7 +15671,7 @@ var require_get_intrinsic = __commonJS({
       "%Math.max%": max,
       "%Math.min%": min,
       "%Math.pow%": pow,
-      "%Math.round%": round,
+      "%Math.round%": round2,
       "%Math.sign%": sign,
       "%Reflect.getPrototypeOf%": $ReflectGPO
     };
@@ -60182,6 +60182,22 @@ var ApifyRunner = class {
   }
 };
 
+// src/discovery/script.ts
+var SIMPLIFIED = "\u4EEC\u8FD9\u8BF4\u4E2A\u4E3A\u65F6\u4F1A\u6765\u5BF9\u4E48\u53D1\u56FD\u5B66\u7231\u5988\u5B9D\u513F\u4EB2\u4E50\u4E70\u5356\u89C6\u9891\u7535\u4E1C\u8F66\u957F\u89C1\u5173\u5F00\u95E8\u95EE\u95F4\u65E0\u4E0E\u4ECE\u52A8\u73B0\u7ECF\u8FC7\u8FD8\u8FDB\u8FD0\u8FB9\u8BA9\u8BDD\u8BED\u8BFB\u8C22\u8BF7\u8BA4\u8BC6\u5E94\u8BE5\u6837\u5934\u5B9E\u4F53\u70B9\u6B22\u4E1A\u4EA7\u52A1\u8FBE\u7F51\u9875\u53F7\u8054\u7EDC\u73AF\u5E86\u5E7F\u573A\u996D\u9986\u9E21\u9C7C\u9E1F\u9A6C\u534E\u6E7E\u6C49\u5199\u753B\u4E66\u7EBF\u7EA2\u7EFF\u84DD\u5C81\u8282\u793C\u8BFE\u7EC3\u4E60\u7EA7\u5E08\u56ED\u56FE\u5355\u53CC\u89C2\u4EF7\u94B1\u94F6\u94C1\u949F\u955C\u996E\u517B\u9992\u5986\u80A4\u62A4\u5A74\u533B\u836F\u7597\u51CF\u620F\u5267\u673A\u5385\u6742\u8BAF\u7801\u8BBE\u8BA1\u8D28\u4F18\u8D2D\u8D27\u8BA2\u9884\u7EA6\u5BA0\u732B\u9C9C\u70E7\u6C64\u9171\u76D0\u9E2D\u867E\u5F53\u6C14\u5E2E\u5E26\u522B\u9009\u9645\u5F20\u7EAA\u5F55\u89C4\u5219\u5386\u7075\u68A6\u604B\u4E3D\u989C\u5C14\u5F25\u8D1D\u4E9A\u97E9\u6C47\u6DA8\u8F86\u5904\u62A5\u7EB8\u7B14\u8BB0\u8BB2\u8BBA\u8BC4\u8BCD\u8BD1\u8BD7\u58F0\u54CD\u56E2\u961F\u5458\u8D5B\u5956\u80DC\u8D25\u8F93\u8D62\u6218\u519B\u67AA\u6781\u7B80\u96BE\u9898\u4F17\u804C\u8D44\u8D22\u5C42\u697C\u53A8\u536B\u706F\u6811\u53F6\u98CE\u9633\u9634\u70ED\u6E29\u6E7F\u51C0\u6D01\u810F\u574F\u7EAF\u7ED8\u6444\u8F91";
+var TRADITIONAL = "\u5011\u9019\u8AAA\u500B\u70BA\u6642\u6703\u4F86\u5C0D\u9EBC\u767C\u570B\u5B78\u611B\u5ABD\u5BF6\u5152\u89AA\u6A02\u8CB7\u8CE3\u8996\u983B\u96FB\u6771\u8ECA\u9577\u898B\u95DC\u958B\u9580\u554F\u9593\u7121\u8207\u5F9E\u52D5\u73FE\u7D93\u904E\u9084\u9032\u904B\u908A\u8B93\u8A71\u8A9E\u8B80\u8B1D\u8ACB\u8A8D\u8B58\u61C9\u8A72\u6A23\u982D\u5BE6\u9AD4\u9EDE\u6B61\u696D\u7522\u52D9\u9054\u7DB2\u9801\u865F\u806F\u7D61\u74B0\u6176\u5EE3\u5834\u98EF\u9928\u96DE\u9B5A\u9CE5\u99AC\u83EF\u7063\u6F22\u5BEB\u756B\u66F8\u7DDA\u7D05\u7DA0\u85CD\u6B72\u7BC0\u79AE\u8AB2\u7DF4\u7FD2\u7D1A\u5E2B\u5712\u5716\u55AE\u96D9\u89C0\u50F9\u9322\u9280\u9435\u9418\u93E1\u98F2\u990A\u9945\u599D\u819A\u8B77\u5B30\u91AB\u85E5\u7642\u6E1B\u6232\u5287\u6A5F\u5EF3\u96DC\u8A0A\u78BC\u8A2D\u8A08\u8CEA\u512A\u8CFC\u8CA8\u8A02\u9810\u7D04\u5BF5\u8C93\u9BAE\u71D2\u6E6F\u91AC\u9E7D\u9D28\u8766\u7576\u6C23\u5E6B\u5E36\u5225\u9078\u969B\u5F35\u7D00\u9304\u898F\u5247\u6B77\u9748\u5922\u6200\u9E97\u984F\u723E\u5F4C\u8C9D\u4E9E\u97D3\u532F\u6F32\u8F1B\u8655\u5831\u7D19\u7B46\u8A18\u8B1B\u8AD6\u8A55\u8A5E\u8B6F\u8A69\u8072\u97FF\u5718\u968A\u54E1\u8CFD\u734E\u52DD\u6557\u8F38\u8D0F\u6230\u8ECD\u69CD\u6975\u7C21\u96E3\u984C\u773E\u8077\u8CC7\u8CA1\u5C64\u6A13\u5EDA\u885B\u71C8\u6A39\u8449\u98A8\u967D\u9670\u71B1\u6EAB\u6FD5\u6DE8\u6F54\u9AD2\u58DE\u7D14\u7E6A\u651D\u8F2F";
+var SCRIPT_PAIRS = [...SIMPLIFIED].map((s, i) => [s, [...TRADITIONAL][i]]);
+var SIMP = new Set(SCRIPT_PAIRS.map(([s]) => s));
+var TRAD = new Set(SCRIPT_PAIRS.map(([, t]) => t));
+function script(text) {
+  let simp = 0;
+  let trad = 0;
+  for (const ch of text) {
+    if (SIMP.has(ch)) simp++;
+    else if (TRAD.has(ch)) trad++;
+  }
+  return trad > simp ? "traditional" : simp > trad ? "simplified" : "";
+}
+
 // src/discovery/filters.ts
 var HAN_RE = /[一-鿿]/;
 var KANA_RE = /[぀-ヿ]/;
@@ -60189,13 +60205,29 @@ function looksChinese(text) {
   return HAN_RE.test(text) && !KANA_RE.test(text);
 }
 function keep(c, opts) {
+  const [ok, reason] = settled(c, opts);
+  if (!ok) return [ok, reason];
+  if (c.followers === null && (opts.minFollowers != null || opts.maxFollowers != null)) return [false, "unknown_followers"];
+  return language(c, opts);
+}
+function language(c, opts) {
+  const text = `${c.name}
+${c.bio}`;
+  if ((opts.chineseOnly || opts.script) && !looksChinese(text)) return [false, "not_chinese"];
+  const found = opts.script ? script(text) : "";
+  if (found && found !== opts.script) return [false, `not_${opts.script}`];
+  return [true, ""];
+}
+function prefilter(c, opts) {
+  if (!settled(c, opts)[0]) return false;
+  return !c.bio || language(c, opts)[0];
+}
+function settled(c, opts) {
   if (c.isPrivate) return [false, "private"];
   if (c.followers !== null) {
     if (opts.minFollowers != null && c.followers < opts.minFollowers) return [false, "below_min_followers"];
     if (opts.maxFollowers != null && c.followers > opts.maxFollowers) return [false, "above_max_followers"];
   }
-  if (opts.chineseOnly && !looksChinese(`${c.name}
-${c.bio}`)) return [false, "not_chinese"];
   return [true, ""];
 }
 
@@ -60218,6 +60250,15 @@ var Creator = class {
   externalUrl = "";
   discoveredBy = "";
   // e.g. "related", "search:新秘", "input"
+  // Activity, from whatever the actors already return; null when they don't say.
+  postsCount = null;
+  lastPostAt = "";
+  // ISO time of the newest post seen
+  avgLikes = null;
+  // over the recent posts seen
+  avgComments = null;
+  avgViews = null;
+  // recent posts, or for YouTube the channel's lifetime views per video
   email = "";
   emailSource = "";
   /** Every address found, with the source it was first seen in. */
@@ -60228,6 +60269,19 @@ var Creator = class {
   }
   get allEmails() {
     return this.emails.map((e) => e.email);
+  }
+  /** Activity from a few recent posts. Pinned ones are left out: they sit on top however old they are. */
+  setPosts(posts) {
+    const recent = posts.filter((p) => !p.pinned);
+    const times = recent.map((p) => p.time).filter(Boolean).sort();
+    if (times.length) this.lastPostAt = times[times.length - 1];
+    const avg = (pick) => {
+      const xs = recent.map(pick).filter((x) => x != null && x >= 0);
+      return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null;
+    };
+    this.avgLikes = avg((p) => p.likes) ?? this.avgLikes;
+    this.avgComments = avg((p) => p.comments) ?? this.avgComments;
+    this.avgViews = avg((p) => p.views) ?? this.avgViews;
   }
   addEmail(email, source) {
     email = email.trim();
@@ -60331,7 +60385,8 @@ function merge(pool, c) {
   for (const attr of ["profileUrl", "name", "bio", "externalUrl"]) {
     if (!existing[attr] && c[attr]) existing[attr] = c[attr];
   }
-  for (const attr of ["followers", "isBusiness", "isPrivate"]) {
+  if (!existing.lastPostAt && c.lastPostAt) existing.lastPostAt = c.lastPostAt;
+  for (const attr of ["followers", "isBusiness", "isPrivate", "postsCount", "avgLikes", "avgComments", "avgViews"]) {
     if (existing[attr] === null && c[attr] !== null) existing[attr] = c[attr];
   }
   for (const e of c.emails) existing.addEmail(e.email, e.source);
@@ -60367,7 +60422,7 @@ async function igDiscover(api, seeds, keywords, perSeed, perKeyword) {
     );
     for (const it of items) {
       const handle = it.username || "";
-      merge(pool, new Creator("instagram", handle, {
+      const c = new Creator("instagram", handle, {
         profileUrl: `https://www.instagram.com/${handle}/`,
         name: it.fullName || "",
         followers: toInt(it.followersCount),
@@ -60375,8 +60430,16 @@ async function igDiscover(api, seeds, keywords, perSeed, perKeyword) {
         isPrivate: it.private ?? null,
         bio: it.biography || "",
         externalUrl: it.externalUrl || "",
-        discoveredBy: `search:${it.searchTerm ?? ""}`
-      }));
+        discoveredBy: `search:${it.searchTerm ?? ""}`,
+        postsCount: toInt(it.postsCount)
+      });
+      c.setPosts((it.latestPosts || []).map((p) => ({
+        time: p.timestamp || "",
+        likes: toInt(p.likesCount),
+        comments: toInt(p.commentsCount),
+        views: toInt(p.videoViewCount)
+      })));
+      merge(pool, c);
     }
   }
   return [...pool.values()];
@@ -60397,6 +60460,7 @@ async function igLookup(api, creators) {
       continue;
     }
     if (it.follower_count !== null && it.follower_count !== void 0) c.followers = toInt(it.follower_count);
+    c.postsCount = toInt(it.total_posts) ?? c.postsCount;
     c.isBusiness = it.is_business ?? c.isBusiness;
     c.isPrivate = it.is_private ?? c.isPrivate;
     c.name = it.full_name || c.name;
@@ -60447,11 +60511,11 @@ function ytHandle(value) {
   if (value.includes("youtube.com/")) value = value.replace(/\/+$/, "").split("/").pop() ?? "";
   return value.startsWith("@") ? value : `@${value}`;
 }
-async function ytDiscover(api, keywords, perKeyword, minFollowers, maxFollowers, country, language) {
+async function ytDiscover(api, keywords, perKeyword, minFollowers, maxFollowers, country, language2) {
   if (!keywords.length) return [];
   const input = { discoveryMode: "both", searchTerms: keywords, maxChannelsPerSearchTerm: perKeyword };
   if (country) input.countryHint = country;
-  if (language) input.languageHint = language;
+  if (language2) input.languageHint = language2;
   if (minFollowers) input.minSubscribers = minFollowers;
   if (maxFollowers) input.maxSubscribers = maxFollowers;
   const items = await api.run("yt_search", input, keywords.length * perKeyword);
@@ -60462,8 +60526,11 @@ async function ytDiscover(api, keywords, perKeyword, minFollowers, maxFollowers,
       name: get(it, "channel.title") || "",
       followers: toInt(get(it, "metrics.subscribers")),
       bio: get(it, "channel.description") || "",
-      discoveredBy: `search:${get(it, "discoverySource.value") ?? ""}`
+      discoveredBy: `search:${get(it, "discoverySource.value") ?? ""}`,
+      postsCount: toInt(get(it, "metrics.videos"))
     });
+    const views = toInt(get(it, "metrics.totalViews"));
+    if (views != null && c.postsCount) c.avgViews = Math.round(views / c.postsCount);
     const links = get(it, "profile.externalLinks") || [];
     if (links.length) c.externalUrl = typeof links[0] === "object" ? links[0].url || "" : String(links[0]);
     for (const e of [...splitField(get(it, "profile.emails")), ...extract(c.bio)]) c.addEmail(e, "bio");
@@ -60516,7 +60583,8 @@ function ttCreator(meta, discoveredBy) {
     isPrivate: meta.privateAccount ?? null,
     bio: meta.signature || "",
     externalUrl: meta.bioLink || "",
-    discoveredBy
+    discoveredBy,
+    postsCount: toInt(meta.video)
   });
   for (const e of extract(c.bio)) c.addEmail(e, "bio");
   return c;
@@ -60534,18 +60602,31 @@ async function ttDiscover(api, keywords, perKeyword) {
   }
   return [...pool.values()];
 }
+var TT_POSTS_PER_PROFILE = 4;
 async function ttLookup(api, creators) {
   const todo = creators.filter((c) => !c.bio && !c.email);
   if (!todo.length) return;
   const items = await api.run(
     "tt_profile",
-    { profiles: todo.map((c) => normalizeHandle(c.handle)), resultsPerPage: 1 },
-    todo.length
+    { profiles: todo.map((c) => normalizeHandle(c.handle)), resultsPerPage: TT_POSTS_PER_PROFILE },
+    todo.length * TT_POSTS_PER_PROFILE
   );
   const byHandle = /* @__PURE__ */ new Map();
+  const posts = /* @__PURE__ */ new Map();
   for (const it of items) {
     const meta = it.authorMeta || {};
-    if (meta.name && !byHandle.has(normalizeHandle(meta.name))) byHandle.set(normalizeHandle(meta.name), meta);
+    if (!meta.name) continue;
+    const key = normalizeHandle(meta.name);
+    if (!byHandle.has(key)) byHandle.set(key, meta);
+    if (it.createTimeISO) {
+      posts.set(key, [...posts.get(key) ?? [], {
+        time: it.createTimeISO,
+        likes: toInt(it.diggCount),
+        comments: toInt(it.commentCount),
+        views: toInt(it.playCount),
+        pinned: !!it.isPinned
+      }]);
+    }
   }
   for (const c of todo) {
     const meta = byHandle.get(normalizeHandle(c.handle));
@@ -60556,6 +60637,8 @@ async function ttLookup(api, creators) {
     c.isPrivate = fresh.isPrivate;
     c.bio = fresh.bio;
     c.externalUrl = fresh.externalUrl;
+    c.postsCount = fresh.postsCount;
+    c.setPosts(posts.get(normalizeHandle(c.handle)) ?? []);
     for (const e of fresh.emails) c.addEmail(e.email, "bio");
   }
 }
@@ -60570,6 +60653,7 @@ var DEFAULT_PARAMS = {
   minFollowers: null,
   maxFollowers: null,
   chineseOnly: false,
+  script: null,
   linkPages: true,
   youtubeHidden: false,
   country: "TW",
@@ -60581,12 +60665,13 @@ async function discover(api, p, skip = /* @__PURE__ */ new Set()) {
   const skipped = (c) => skip.has(normalizeHandle(c.handle)) || skip.has(channelKey(c.profileUrl));
   const drop = (cs) => dedupe(cs).filter((c) => !skipped(c));
   const kept = (cs) => cs.filter((c) => keep(c, p)[0]);
+  const worth = (cs) => cs.filter((c) => prefilter(c, p));
   let creators = [];
   let stoppedEarly = "";
   try {
     if (p.platform === "instagram") {
       creators = drop([...given, ...await igDiscover(api, p.seeds, p.keywords, p.perSeed, p.perKeyword)]);
-      await igLookup(api, creators);
+      await igLookup(api, worth(creators));
       if (p.linkPages) await linkPagesLookup(api, kept(creators));
     } else if (p.platform === "youtube") {
       creators = drop([...given, ...await ytDiscover(
@@ -60598,12 +60683,12 @@ async function discover(api, p, skip = /* @__PURE__ */ new Set()) {
         p.country,
         p.language
       )]);
-      await ytLookup(api, creators);
+      await ytLookup(api, worth(creators));
       if (p.linkPages) await linkPagesLookup(api, kept(creators));
       if (p.youtubeHidden) await ytHiddenLookup(api, kept(creators));
     } else {
       creators = drop([...given, ...await ttDiscover(api, p.keywords, p.perKeyword)]);
-      await ttLookup(api, creators);
+      await ttLookup(api, worth(creators));
       if (p.linkPages) await linkPagesLookup(api, kept(creators));
     }
   } catch (err) {
@@ -60617,11 +60702,92 @@ async function discover(api, p, skip = /* @__PURE__ */ new Set()) {
   });
   return { creators: results, stoppedEarly };
 }
+function plan(p) {
+  const found = p.handles.length + p.keywords.length * p.perKeyword + p.seeds.length * p.perSeed;
+  const searched = (key, n) => n ? [[key, n]] : [];
+  const byHandle = p.handles.length;
+  const order = p.platform === "instagram" ? [
+    ...searched("ig_related", p.seeds.length * p.perSeed),
+    ...searched("ig_search", p.keywords.length * p.perKeyword),
+    ["ig_email", found],
+    ...p.linkPages ? [["link_pages", found]] : []
+  ] : p.platform === "youtube" ? [
+    ...searched("yt_search", p.keywords.length * p.perKeyword),
+    ...searched("yt_profile", byHandle),
+    ...p.linkPages ? [["link_pages", found]] : [],
+    ...p.youtubeHidden ? [["yt_hidden", found]] : []
+  ] : [
+    ...searched("tt_search", p.keywords.length * p.perKeyword),
+    ...searched("tt_profile", byHandle),
+    ...p.linkPages ? [["link_pages", found]] : []
+  ];
+  let spent = 0;
+  const steps = order.filter(([, n]) => n > 0).map(([step, accounts]) => {
+    const costUsd = estimate(step, step === "tt_profile" ? accounts * TT_POSTS_PER_PROFILE : accounts);
+    const left = p.maxSpend - spent;
+    const cap = chargeCap(costUsd, left);
+    const budget = cap == null ? "not_started" : cap < costUsd ? "cut" : "ok";
+    spent += cap == null ? 0 : Math.min(costUsd, cap);
+    return { step, actor: ACTORS[step].id, accounts, costUsd: round(costUsd), budget };
+  });
+  return { maxAccounts: found, steps, maxCostUsd: round(steps.reduce((sum, s) => sum + s.costUsd, 0)) };
+}
+function round(usd) {
+  return Math.round(usd * 100) / 100;
+}
 
 // src/search.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
+// src/mailcheck.ts
+import { Resolver } from "node:dns/promises";
+var KNOWN = /* @__PURE__ */ new Set([
+  "gmail.com",
+  "googlemail.com",
+  "yahoo.com",
+  "yahoo.com.tw",
+  "hotmail.com",
+  "hotmail.com.tw",
+  "outlook.com",
+  "live.com",
+  "icloud.com",
+  "me.com",
+  "qq.com",
+  "163.com",
+  "126.com",
+  "naver.com",
+  "protonmail.com",
+  "proton.me"
+]);
+function dnsCheck() {
+  const dns = new Resolver({ timeout: 3e3, tries: 2 });
+  return async (domain) => {
+    try {
+      const mx = await dns.resolveMx(domain);
+      return mx.some((r) => r.exchange && r.exchange !== ".") ? "ok" : "no_mail_server";
+    } catch (err) {
+      return err?.code === "ENOTFOUND" || err?.code === "ENODATA" ? "no_mail_server" : "unknown";
+    }
+  };
+}
+async function checkEmails(emails, check, concurrency = 16) {
+  const domainOf = (e) => e.split("@").pop().toLowerCase();
+  const domains = [...new Set(emails.map(domainOf))];
+  const byDomain = /* @__PURE__ */ new Map();
+  let next = 0;
+  const worker = async () => {
+    while (next < domains.length) {
+      const d = domains[next++];
+      byDomain.set(d, KNOWN.has(d) ? "ok" : await check(d));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, domains.length) }, worker));
+  return new Map(emails.map((e) => [e, byDomain.get(domainOf(e))]));
+}
+
+// src/search.ts
 function home() {
   return process.env.KOL_FIND_HOME || join(homedir(), ".kol-find");
 }
@@ -60704,6 +60870,7 @@ function params(o) {
     minFollowers: o.minFollowers,
     maxFollowers: o.maxFollowers,
     chineseOnly: o.chineseOnly,
+    script: o.script,
     linkPages: o.linkPages,
     youtubeHidden: o.youtubeHidden,
     country: o.country,
@@ -60711,42 +60878,74 @@ function params(o) {
     maxSpend: o.budget
   };
 }
-async function search(run, o) {
+async function search(run, o, check = dnsCheck()) {
   const skip = new Set(o.exclude.map(handleOf).filter(Boolean));
   const result = await discover(run, params(o), skip);
-  const people = [];
+  const kept = [];
   const filtered = {};
-  for (const { creator: c, status } of result.creators) {
+  for (const { creator, status } of result.creators) {
     if (status.startsWith("filtered:")) {
       const reason = status.slice("filtered:".length);
       filtered[reason] = (filtered[reason] ?? 0) + 1;
-      continue;
-    }
-    people.push({
+    } else kept.push(creator);
+  }
+  const checks = await checkEmails(kept.flatMap((c) => c.allEmails), check);
+  const people = kept.map((c) => {
+    const best = c.emails.find((e) => checks.get(e.email) !== "no_mail_server") ?? c.emails[0];
+    const others = c.emails.filter((e) => e !== best).map((e) => e.email);
+    return {
       platform: c.platform,
       handle: c.handle,
       name: c.name || c.handle,
       url: c.profileUrl,
       followers: c.followers,
       isBusiness: c.isBusiness,
-      email: c.email,
-      emailSource: c.emailSource,
-      otherEmails: c.allEmails.slice(1),
+      email: best?.email ?? "",
+      emailSource: best?.source ?? "",
+      emailCheck: best ? checks.get(best.email) : "",
+      sharedWith: [],
+      otherEmails: others,
+      postsCount: c.postsCount,
+      lastPostAt: c.lastPostAt,
+      avgLikes: c.avgLikes,
+      avgComments: c.avgComments,
+      avgViews: c.avgViews,
+      engagementRate: engagement(c),
       externalUrl: c.externalUrl,
       bio: c.bio,
+      script: script(`${c.name}
+${c.bio}`),
       foundBy: c.discoveredBy
-    });
+    };
+  });
+  const byEmail = /* @__PURE__ */ new Map();
+  for (const p of people.filter((p2) => p2.email)) {
+    const key = p.email.toLowerCase();
+    byEmail.set(key, [...byEmail.get(key) ?? [], p]);
   }
+  for (const group of byEmail.values()) {
+    for (const p of group) p.sharedWith = group.filter((q) => q !== p).map((q) => q.handle);
+  }
+  const spentUsd = Number((run.spent ?? 0).toFixed(2));
+  const usable = people.filter((p) => p.email && p.emailCheck !== "no_mail_server").length;
   return {
     found: people.length,
-    withEmail: people.filter((p) => p.email).length,
+    /** People with an email whose domain takes mail (or couldn't be checked). */
+    withEmail: usable,
+    emailNoMailServer: people.filter((p) => p.emailCheck === "no_mail_server").length || void 0,
+    sharedEmails: [...byEmail.values()].filter((g) => g.length > 1).length || void 0,
     filtered,
-    spentUsd: Number((run.spent ?? 0).toFixed(2)),
+    spentUsd,
+    costPerEmailUsd: usable ? Number((spentUsd / usable).toFixed(3)) : void 0,
     stoppedEarly: result.stoppedEarly || void 0,
     /** Nothing was skipped for these. */
     excludeUnread: unreadable(o.exclude),
     people
   };
+}
+function engagement(c) {
+  if (c.avgLikes == null || !c.followers) return null;
+  return Number(((c.avgLikes + (c.avgComments ?? 0)) / c.followers).toFixed(4));
 }
 var COLUMNS = [
   ["\u5E73\u53F0", (p) => p.platform],
@@ -60757,8 +60956,17 @@ var COLUMNS = [
   ["\u90AE\u7BB1", (p) => p.email],
   ["\u5176\u4ED6\u90AE\u7BB1", (p) => p.otherEmails.join(", ")],
   ["\u90AE\u7BB1\u6765\u6E90", (p) => p.emailSource],
+  ["\u90AE\u7BB1\u68C0\u67E5", (p) => p.emailCheck],
+  ["\u5171\u7528\u90AE\u7BB1\u7684\u8D26\u53F7", (p) => p.sharedWith.join(", ")],
   ["\u5546\u4E1A\u53F7", (p) => p.isBusiness == null ? "" : p.isBusiness ? "\u662F" : "\u5426"],
+  ["\u5E16\u5B50\u6570", (p) => p.postsCount ?? ""],
+  ["\u6700\u8FD1\u53D1\u5E16", (p) => p.lastPostAt.slice(0, 10)],
+  ["\u5E73\u5747\u70B9\u8D5E", (p) => p.avgLikes ?? ""],
+  ["\u5E73\u5747\u8BC4\u8BBA", (p) => p.avgComments ?? ""],
+  ["\u5E73\u5747\u64AD\u653E", (p) => p.avgViews ?? ""],
+  ["\u4E92\u52A8\u7387", (p) => p.engagementRate == null ? "" : `${(p.engagementRate * 100).toFixed(2)}%`],
   ["\u5916\u94FE", (p) => p.externalUrl],
+  ["\u6587\u5B57", (p) => ({ traditional: "\u7E41\u4F53", simplified: "\u7B80\u4F53", "": "" })[p.script]],
   ["\u627E\u5230\u65B9\u5F0F", (p) => p.foundBy],
   ["\u7B80\u4ECB", (p) => p.bio]
 ];
@@ -60868,6 +61076,7 @@ var HELP = `kol-find search --platform instagram|youtube|tiktok [\u627E\u6CD5] [
     --target N              \u5927\u7EA6\u641C\u591A\u5C11\u4E2A\u8D26\u53F7\uFF0C\u5E73\u5206\u7ED9\u5404\u5173\u952E\u8BCD\u548C\u76F8\u4F3C\u8D26\u53F7\uFF08\u4E0D\u7ED9\u5C31\u6BCF\u4E2A\u5173\u952E\u8BCD ${DEFAULT_PARAMS.perKeyword}\u3001\u6BCF\u4E2A\u76F8\u4F3C\u8D26\u53F7 ${DEFAULT_PARAMS.perSeed}\uFF09
     --min-followers N --max-followers N
     --chinese-only          \u53EA\u8981\u540D\u79F0\u6216\u7B80\u4ECB\u91CC\u6709\u4E2D\u6587\uFF08\u4E14\u6CA1\u6709\u65E5\u6587\u5047\u540D\uFF09\u7684
+    --script \u7E41\u4F53|\u7B80\u4F53       \u53EA\u8981\u8FD9\u79CD\u4E2D\u6587\u7684\uFF08\u5305\u542B --chinese-only\uFF09\uFF1B\u540D\u79F0\u548C\u7B80\u4ECB\u592A\u77ED\u3001\u770B\u4E0D\u51FA\u7E41\u7B80\u7684\u7167\u6837\u4FDD\u7559
     --exclude a,b           \u8DF3\u8FC7\u8FD9\u4E9B\u8D26\u53F7\uFF08\u8D26\u53F7\u6216\u4E3B\u9875\u94FE\u63A5\uFF09\uFF0C\u4E0D\u518D\u82B1\u94B1\u67E5
     --exclude-file \u6587\u4EF6      \u540C\u4E0A\uFF0C\u4ECE\u6587\u4EF6\u8BFB\uFF1A\u4E00\u884C\u4E00\u4E2A\u7684\u540D\u5355\u3001\u4EFB\u4F55\u8868\u683C\u5BFC\u51FA\u7684 CSV / TSV\u3001\u6216 JSON \u90FD\u884C\uFF1B
                             \u6BCF\u4E00\u683C\u91CC\u7684 @\u8D26\u53F7 \u548C\u5E73\u53F0\u4E3B\u9875\u94FE\u63A5\u90FD\u4F1A\u88AB\u8BA4\u51FA\u6765\uFF0C\u5176\u4ED6\u5217\u4E0D\u7BA1
@@ -60890,6 +61099,12 @@ function num(v) {
   if (!Number.isFinite(n)) throw new Error(`\u4E0D\u662F\u6570\u5B57\uFF1A${v}`);
   return n;
 }
+function scriptOf(v) {
+  if (v === void 0) return null;
+  if (/^(繁|traditional|trad|zh-?tw|zh-?hant)/i.test(v)) return "traditional";
+  if (/^(简|簡|simplified|simp|zh-?cn|zh-?hans)/i.test(v)) return "simplified";
+  throw new Error(`--script \u53EA\u80FD\u662F \u7E41\u4F53 \u6216 \u7B80\u4F53\uFF1A${v}`);
+}
 function excludeFile(file) {
   if (!existsSync2(file)) throw new Error(`\u627E\u4E0D\u5230 --exclude-file\uFF1A${file}`);
   const bytes = readFileSync2(file);
@@ -60897,6 +61112,29 @@ function excludeFile(file) {
     throw new Error("--exclude-file \u8BFB\u4E0D\u4E86 Excel / Numbers \u6587\u4EF6\uFF0C\u8BF7\u5148\u5BFC\u51FA\u6210 CSV");
   }
   return readExclude(bytes.toString("utf8"));
+}
+var STEP_NAMES = {
+  ig_related: "\u76F8\u4F3C\u8D26\u53F7",
+  ig_search: "\u5173\u952E\u8BCD\u641C\u8D26\u53F7",
+  ig_email: "\u67E5\u8D44\u6599\u548C\u90AE\u7BB1",
+  link_pages: "\u7B80\u4ECB\u5916\u94FE\u627E\u90AE\u7BB1",
+  yt_search: "\u5173\u952E\u8BCD\u641C\u9891\u9053",
+  yt_profile: "\u67E5\u9891\u9053\u8D44\u6599",
+  yt_hidden: "\u9690\u85CF\u5546\u52A1\u90AE\u7BB1",
+  tt_search: "\u5173\u952E\u8BCD\u641C\u8D26\u53F7",
+  tt_profile: "\u67E5\u8D26\u53F7\u8D44\u6599"
+};
+var BUDGET_NOTES = { ok: "\u591F", cut: "\u9884\u7B97\u53EA\u591F\u8DD1\u4E00\u90E8\u5206", not_started: "\u9884\u7B97\u4E0D\u591F\uFF0C\u4E0D\u4F1A\u542F\u52A8" };
+function forecast(p) {
+  const { maxAccounts, steps, maxCostUsd } = plan(p);
+  const short = steps.filter((s) => s.budget !== "ok");
+  return {
+    \u6700\u591A\u641C\u5230\u8D26\u53F7: maxAccounts,
+    \u6B65\u9AA4: steps.map((s) => ({ \u6B65\u9AA4: STEP_NAMES[s.step], \u6700\u591A\u8D26\u53F7: s.accounts, \u6700\u591A\u82B1\u8D39: s.costUsd, \u9884\u7B97: BUDGET_NOTES[s.budget] })),
+    \u8DD1\u5B8C\u6700\u591A\u82B1\u8D39: maxCostUsd,
+    \u9884\u7B97: short.length ? `$${p.maxSpend} \u4E0D\u591F\u8DD1\u5B8C\uFF1A${short.map((s) => `${STEP_NAMES[s.step]}${BUDGET_NOTES[s.budget]}`).join("\uFF1B")}\u3002\u8FD9\u4E9B\u6B65\u9AA4\u5C11\u67E5\u7684\u4EBA\u5C31\u6CA1\u6709\u90AE\u7BB1` : `$${p.maxSpend} \u591F\u8DD1\u5B8C\u6240\u6709\u6B65\u9AA4`,
+    \u8BF4\u660E: "\u6309\u6BCF\u4E2A\u8D26\u53F7\u90FD\u8D70\u5B8C\u6BCF\u4E00\u6B65\u7B97\u7684\u4E0A\u9650\uFF1B\u8DF3\u8FC7\u7684\u3001\u88AB\u7B5B\u6389\u7684\u3001\u524D\u4E00\u6B65\u5DF2\u7ECF\u627E\u5230\u90AE\u7BB1\u7684\u4EBA\u4E0D\u518D\u5F80\u4E0B\u67E5\uFF0C\u5B9E\u9645\u901A\u5E38\u5C11\u5F97\u591A"
+  };
 }
 async function main(argv) {
   const { values: v, positionals } = parseArgs({
@@ -60911,6 +61149,7 @@ async function main(argv) {
       "min-followers": { type: "string" },
       "max-followers": { type: "string" },
       "chinese-only": { type: "boolean" },
+      script: { type: "string" },
       exclude: { type: "string" },
       "exclude-file": { type: "string" },
       "youtube-hidden": { type: "boolean" },
@@ -60937,6 +61176,7 @@ async function main(argv) {
     minFollowers: num(v["min-followers"]),
     maxFollowers: num(v["max-followers"]),
     chineseOnly: !!v["chinese-only"],
+    script: scriptOf(v.script),
     linkPages: !v["no-link-pages"],
     youtubeHidden: !!v["youtube-hidden"],
     country: v.country ?? DEFAULT_PARAMS.country,
@@ -60955,6 +61195,7 @@ async function main(argv) {
       \u53C2\u6570: rest,
       \u8DF3\u8FC7\u8D26\u53F7: o.exclude.length,
       \u8BA4\u4E0D\u51FA\u7684\u8DF3\u8FC7\u9879: unreadable(o.exclude),
+      \u9884\u8BA1: forecast(p),
       \u8BF4\u660E: `\u6B63\u5F0F\u8FD0\u884C\u6700\u591A\u82B1 $${maxSpend}\uFF0C\u5230\u4E0A\u9650\u5C31\u505C\uFF0C\u5DF2\u627E\u5230\u7684\u7167\u6837\u8FD4\u56DE\uFF1B\u7ED3\u679C\u5199\u5230 ${dir}`
     }, null, 2));
     return;
