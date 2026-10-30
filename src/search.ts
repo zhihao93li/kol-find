@@ -6,8 +6,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ActorRunner, RunLedger, RunRecord } from "./discovery/apify.js";
-import { channelKey, normalizeHandle, PLATFORMS, type EmailSource, type Platform } from "./discovery/models.js";
+import { channelKey, normalizeHandle, PLATFORMS, type Creator, type EmailSource, type Platform } from "./discovery/models.js";
 import { DEFAULT_PARAMS, discover, type DiscoveryParams } from "./discovery/run.js";
+import { script, type Script } from "./discovery/script.js";
+import { checkEmails, dnsCheck, type DomainCheck, type MailCheck } from "./mailcheck.js";
 
 export interface SearchOpts {
   platform: Platform;
@@ -23,6 +25,8 @@ export interface SearchOpts {
   minFollowers: number | null;
   maxFollowers: number | null;
   chineseOnly: boolean;
+  /** Only Chinese in this script. */
+  script: Script | null;
   linkPages: boolean;
   youtubeHidden: boolean;
   /** YouTube search hints; empty means no bias. */
@@ -41,9 +45,24 @@ export interface Person {
   isBusiness: boolean | null;
   email: string;
   emailSource: EmailSource | "";
+  /** Whether the email's domain takes mail; "" when there is no email. */
+  emailCheck: MailCheck | "";
+  /** Other accounts in this list with the same email: often an agency's address. */
+  sharedWith: string[];
   otherEmails: string[];
   externalUrl: string;
   bio: string;
+  /** Activity from what the search already returned; null or "" when it didn't say. */
+  postsCount: number | null;
+  lastPostAt: string;
+  avgLikes: number | null;
+  avgComments: number | null;
+  /** Recent posts' plays, or for YouTube the channel's lifetime views per video. */
+  avgViews: number | null;
+  /** (average likes + average comments) / followers, over the recent posts seen. */
+  engagementRate: number | null;
+  /** The Chinese script of the name and bio, "" when they don't show one. */
+  script: Script | "";
   /** How it was found, e.g. "related", "search:親子", "input". */
   foundBy: string;
 }
@@ -147,33 +166,55 @@ export function params(o: SearchOpts): DiscoveryParams {
   return {
     ...DEFAULT_PARAMS, platform: o.platform, keywords: o.keywords, seeds: o.seeds, handles: o.handles,
     ...(per ? { perKeyword: per, perSeed: per } : {}),
-    minFollowers: o.minFollowers, maxFollowers: o.maxFollowers, chineseOnly: o.chineseOnly,
+    minFollowers: o.minFollowers, maxFollowers: o.maxFollowers, chineseOnly: o.chineseOnly, script: o.script,
     linkPages: o.linkPages, youtubeHidden: o.youtubeHidden, country: o.country, language: o.language, maxSpend: o.budget,
   };
 }
 
-export async function search(run: ActorRunner & { spent?: number }, o: SearchOpts) {
+export async function search(run: ActorRunner & { spent?: number }, o: SearchOpts, check: DomainCheck = dnsCheck()) {
   const skip = new Set(o.exclude.map(handleOf).filter(Boolean));
   const result = await discover(run, params(o), skip);
-  const people: Person[] = [];
+  const kept: Creator[] = [];
   const filtered: Record<string, number> = {};
-  for (const { creator: c, status } of result.creators) {
+  for (const { creator, status } of result.creators) {
     if (status.startsWith("filtered:")) {
       const reason = status.slice("filtered:".length);
       filtered[reason] = (filtered[reason] ?? 0) + 1;
-      continue;
-    }
-    people.push({
-      platform: c.platform, handle: c.handle, name: c.name || c.handle, url: c.profileUrl, followers: c.followers,
-      isBusiness: c.isBusiness, email: c.email, emailSource: c.emailSource, otherEmails: c.allEmails.slice(1),
-      externalUrl: c.externalUrl, bio: c.bio, foundBy: c.discoveredBy,
-    });
+    } else kept.push(creator);
   }
+  const checks = await checkEmails(kept.flatMap((c) => c.allEmails), check);
+  const people = kept.map((c): Person => {
+    // Lead with the first address whose domain takes mail, keeping the found order otherwise.
+    const best = c.emails.find((e) => checks.get(e.email) !== "no_mail_server") ?? c.emails[0];
+    const others = c.emails.filter((e) => e !== best).map((e) => e.email);
+    return {
+      platform: c.platform, handle: c.handle, name: c.name || c.handle, url: c.profileUrl, followers: c.followers,
+      isBusiness: c.isBusiness, email: best?.email ?? "", emailSource: best?.source ?? "",
+      emailCheck: best ? checks.get(best.email)! : "", sharedWith: [], otherEmails: others,
+      postsCount: c.postsCount, lastPostAt: c.lastPostAt, avgLikes: c.avgLikes, avgComments: c.avgComments,
+      avgViews: c.avgViews, engagementRate: engagement(c),
+      externalUrl: c.externalUrl, bio: c.bio, script: script(`${c.name}\n${c.bio}`), foundBy: c.discoveredBy,
+    };
+  });
+  const byEmail = new Map<string, Person[]>();
+  for (const p of people.filter((p) => p.email)) {
+    const key = p.email.toLowerCase();
+    byEmail.set(key, [...(byEmail.get(key) ?? []), p]);
+  }
+  for (const group of byEmail.values()) {
+    for (const p of group) p.sharedWith = group.filter((q) => q !== p).map((q) => q.handle);
+  }
+  const spentUsd = Number((run.spent ?? 0).toFixed(2));
+  const usable = people.filter((p) => p.email && p.emailCheck !== "no_mail_server").length;
   return {
     found: people.length,
-    withEmail: people.filter((p) => p.email).length,
+    /** People with an email whose domain takes mail (or couldn't be checked). */
+    withEmail: usable,
+    emailNoMailServer: people.filter((p) => p.emailCheck === "no_mail_server").length || undefined,
+    sharedEmails: [...byEmail.values()].filter((g) => g.length > 1).length || undefined,
     filtered,
-    spentUsd: Number((run.spent ?? 0).toFixed(2)),
+    spentUsd,
+    costPerEmailUsd: usable ? Number((spentUsd / usable).toFixed(3)) : undefined,
     stoppedEarly: result.stoppedEarly || undefined,
     /** Nothing was skipped for these. */
     excludeUnread: unreadable(o.exclude),
@@ -181,11 +222,19 @@ export async function search(run: ActorRunner & { spent?: number }, o: SearchOpt
   };
 }
 
+function engagement(c: Creator): number | null {
+  if (c.avgLikes == null || !c.followers) return null;
+  return Number(((c.avgLikes + (c.avgComments ?? 0)) / c.followers).toFixed(4));
+}
+
 const COLUMNS: [string, (p: Person) => unknown][] = [
   ["平台", (p) => p.platform], ["账号", (p) => p.handle], ["名称", (p) => p.name], ["主页", (p) => p.url],
   ["粉丝数", (p) => p.followers ?? ""], ["邮箱", (p) => p.email], ["其他邮箱", (p) => p.otherEmails.join(", ")],
-  ["邮箱来源", (p) => p.emailSource], ["商业号", (p) => (p.isBusiness == null ? "" : p.isBusiness ? "是" : "否")],
-  ["外链", (p) => p.externalUrl], ["找到方式", (p) => p.foundBy], ["简介", (p) => p.bio],
+  ["邮箱来源", (p) => p.emailSource], ["邮箱检查", (p) => p.emailCheck], ["共用邮箱的账号", (p) => p.sharedWith.join(", ")], ["商业号", (p) => (p.isBusiness == null ? "" : p.isBusiness ? "是" : "否")],
+  ["帖子数", (p) => p.postsCount ?? ""], ["最近发帖", (p) => p.lastPostAt.slice(0, 10)],
+  ["平均点赞", (p) => p.avgLikes ?? ""], ["平均评论", (p) => p.avgComments ?? ""], ["平均播放", (p) => p.avgViews ?? ""],
+  ["互动率", (p) => (p.engagementRate == null ? "" : `${(p.engagementRate * 100).toFixed(2)}%`)],
+  ["外链", (p) => p.externalUrl], ["文字", (p) => ({ traditional: "繁体", simplified: "简体", "": "" })[p.script]], ["找到方式", (p) => p.foundBy], ["简介", (p) => p.bio],
 ];
 
 /** CSV with a BOM, so Excel and Numbers read the Chinese right. */
