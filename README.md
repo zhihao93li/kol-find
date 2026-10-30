@@ -2,24 +2,30 @@
 
 找 KOL 和公开邮箱的小工具：在 Instagram、YouTube、TikTok 上按关键词、对标账号的相似账号找人，或查已知账号的邮箱，用的是 Apify 商店里现成的 actor（要花 Apify 的钱）。只返回名单（JSON 和 CSV），不连任何数据库。
 
-一个命令行加一份 skill，在 Claude Code、Codex 里让 agent 用，也能自己在终端跑。
+一个命令行加一份 skill（`SKILL.md` 加脚本，通用格式），能执行命令的 agent 都能用：Claude Code、Codex、Grok Build 等，也能自己在终端跑。需要 Node 20 以上。
 
 ## 安装
 
-- **Claude Code**：
+- **Claude Code**：装插件，以后用 `/plugin` 更新。
 
   ```
   /plugin marketplace add zhihao93li/kol-find
   /plugin install kol-find@kol-find
   ```
 
-- **Codex**：克隆本仓库，把 skill 目录链接进 Codex 的 skills 目录：
+- **Codex、Grok Build**：装进 `~/.agents/skills/`，两个都从这里读。重跑同一条命令就是更新。
 
   ```bash
-  ln -s "$(pwd)/plugin/skills/kol-find" ~/.codex/skills/kol-find
+  curl -fsSL https://raw.githubusercontent.com/zhihao93li/kol-find/main/install.sh | sh
   ```
 
-- **直接用**（Node 20 以上）：`node plugin/skills/kol-find/scripts/kol-find.mjs --help`
+  Grok Build 也会读已装的 Claude Code 插件，装了插件的电脑可以不再装这份，免得出现两个 kol-find。别的 agent 的 skills 目录可以跟在后面：`... | sh -s -- ~/.别的/skills`。
+
+  Codex 默认的沙箱不能联网，跑 kol-find 时要放行（或在配置里打开 `sandbox_workspace_write.network_access`）；结果默认写在 `~/.kol-find/`，想写进工作目录就设 `KOL_FIND_HOME=./.kol-find`。
+
+- **别的 agent**：能执行命令就行。把 `plugin/skills/kol-find/` 整个目录给它，`SKILL.md` 当使用说明（放进它的 skills 目录、`AGENTS.md` 或系统提示词）。
+
+- **直接用**：`node plugin/skills/kol-find/scripts/kol-find.mjs --help`
 
 Apify token 只存在本机：环境变量 `APIFY_TOKEN`，或 `~/.kol-find/apify-token`。
 
@@ -76,7 +82,8 @@ kol-find search --platform instagram --keywords 親子,育兒 --min-followers 50
 | --- | --- |
 | `src/discovery/` | 找人和查邮箱：actor 和价格（`apify.ts`）、各平台步骤（`pipeline.ts`）、整体流程（`run.ts`） |
 | `src/search.ts`、`src/cli.ts` | 命令行：参数、跳过名单、断点、JSON / CSV 输出 |
-| `plugin/` | Claude Code 插件和 skill；`scripts/kol-find.mjs` 由 `npm run build` 打包，要提交 |
+| `plugin/` | Claude Code 插件和通用 skill（`skills/kol-find/` 整个目录就是 skill）；`scripts/kol-find.mjs` 由 `npm run build` 打包，要提交 |
+| `install.sh` | 把 skill 装进 `~/.agents/skills`（Codex、Grok Build 都读） |
 
 ```bash
 npm install
