@@ -60761,17 +60761,43 @@ var KNOWN = /* @__PURE__ */ new Set([
   "protonmail.com",
   "proton.me"
 ]);
-function dnsCheck() {
+function dnsCheck(local = localMx(), confirm = publicMx()) {
+  return async (domain) => await local(domain) === "ok" ? "ok" : confirm(domain);
+}
+function localMx() {
   const dns = new Resolver({ timeout: 3e3, tries: 2 });
   return async (domain) => {
     try {
       const mx = await dns.resolveMx(domain);
-      return mx.some((r) => r.exchange && r.exchange !== ".") ? "ok" : "no_mail_server";
+      return hasExchange(mx.map((r) => r.exchange)) ? "ok" : "no_mail_server";
     } catch (err) {
       return err?.code === "ENOTFOUND" || err?.code === "ENODATA" ? "no_mail_server" : "unknown";
     }
   };
 }
+var DOH = ["https://dns.google/resolve", "https://cloudflare-dns.com/dns-query"];
+function publicMx(get2 = fetch) {
+  return async (domain) => {
+    for (const url of DOH) {
+      try {
+        const res = await get2(`${url}?name=${encodeURIComponent(domain)}&type=MX`, {
+          headers: { accept: "application/dns-json" },
+          signal: AbortSignal.timeout(5e3)
+        });
+        if (res.ok) return readDoh(await res.json());
+      } catch {
+      }
+    }
+    return "unknown";
+  };
+}
+function readDoh(answer) {
+  if (answer?.Status === 3) return "no_mail_server";
+  if (answer?.Status !== 0) return "unknown";
+  const exchanges = (answer.Answer ?? []).filter((a) => a?.type === 15).map((a) => String(a.data).split(/\s+/)[1] ?? "");
+  return hasExchange(exchanges) ? "ok" : "no_mail_server";
+}
+var hasExchange = (exchanges) => exchanges.some((x) => x && x !== ".");
 async function checkEmails(emails, check, concurrency = 16) {
   const domainOf = (e) => e.split("@").pop().toLowerCase();
   const domains = [...new Set(emails.map(domainOf))];
