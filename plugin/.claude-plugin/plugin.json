@@ -1,7 +1,7 @@
 {
   "name": "kol-find",
   "displayName": "找 KOL",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "在 Instagram、YouTube、TikTok 上找人和公开邮箱（Apify），只返回名单，不写任何库。",
   "author": { "name": "zhihao93li" }
 }
