@@ -167,6 +167,23 @@ describe("discover", () => {
     expect(result.creators.map((r) => [r.creator.handle, r.status])).toEqual([["keepme", "no_email"]]);
   });
 
+  it("keeps what an earlier search found when the budget stops the next one", async () => {
+    const api = new FakeApify({ ig_related: [
+      { username: "related_a", full_name: "A" },
+      { username: "known", full_name: "K" },
+    ] }, "ig_search");
+    const result = await discover(api, { ...DEFAULT_PARAMS, platform: "instagram", seeds: ["seed"], keywords: ["新秘"], handles: ["given"] },
+                                  new Set(["known"]));
+    expect(result.stoppedEarly).toBe("budget used up");
+    expect(result.creators.map((r) => [r.creator.handle, r.status])).toEqual([["given", "no_email"], ["related_a", "no_email"]]);
+  });
+
+  it("keeps accounts given by handle when the budget stops the search", async () => {
+    const api = new FakeApify({}, "tt_search");
+    const result = await discover(api, { ...DEFAULT_PARAMS, platform: "tiktok", keywords: ["x"], handles: ["given"] });
+    expect(result.creators.map((r) => r.creator.handle)).toEqual(["given"]);
+  });
+
   it("doesn't pay to look up accounts the search already shows are out of range, nor crawl links of unknowns", async () => {
     const api = new FakeApify({
       ig_search: [

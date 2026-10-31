@@ -40,6 +40,8 @@ export interface RunLedger {
   find(step: string): Promise<RunRecord | null>;
   started(step: string, actor: string, run: RunRecord): Promise<void>;
   finished(step: string, result: { status: string; items: number; costUsd: number }): Promise<void>;
+  /** The step's run failed with nothing to show: drop it, so a re-run starts the step again. */
+  forget(step: string): Promise<void>;
 }
 
 /** Apify refuses a run whose maxTotalChargeUsd is below this. */
@@ -86,8 +88,8 @@ export class ApifyRunner implements ActorRunner {
       if (page.items.length < 1000) break;
     }
     if (run.status !== "SUCCEEDED" && items.length === 0) {
-      await this.ledger.finished(key, { status: run.status, items: 0, costUsd: run.usageTotalUsd ?? 0 });
-      throw new Error(`${actor} 运行失败（${run.status}），run ${record.runId}`);
+      await this.ledger.forget(key);
+      throw new Error(`${actor} 运行失败（${run.status}），run ${record.runId}。用同一个 --job 重跑，这一步会重新启动`);
     }
     // usageTotalUsd may leave out pay-per-event charges, so keep the larger of it and the
     // price-table estimate as a conservative running total.

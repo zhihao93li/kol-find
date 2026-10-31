@@ -44,11 +44,12 @@ export async function discover(api: ActorRunner, p: DiscoveryParams, skip: Set<s
   // range, private), so their lookups aren't paid for. They still come back as filtered.
   const worth = (cs: Creator[]) => cs.filter((c) => prefilter(c, p));
 
+  const found = new Map<string, Creator>();
   let creators: Creator[] = [];
   let stoppedEarly = "";
   try {
     if (p.platform === "instagram") {
-      creators = drop([...given, ...(await pipeline.igDiscover(api, p.seeds, p.keywords, p.perSeed, p.perKeyword))]);
+      creators = drop([...given, ...(await pipeline.igDiscover(api, p.seeds, p.keywords, p.perSeed, p.perKeyword, found))]);
       await pipeline.igLookup(api, worth(creators));
       if (p.linkPages) await pipeline.linkPagesLookup(api, kept(creators));
     } else if (p.platform === "youtube") {
@@ -65,6 +66,8 @@ export async function discover(api: ActorRunner, p: DiscoveryParams, skip: Set<s
   } catch (err) {
     if (!(err instanceof BudgetExceeded)) throw err;
     stoppedEarly = err.message;
+    // Stopped during the searches: the accounts given and those already paid for still come back.
+    if (!creators.length) creators = drop([...given, ...found.values()]);
   }
 
   const results = creators.map((creator) => {

@@ -60172,8 +60172,8 @@ var ApifyRunner = class {
       if (page.items.length < 1e3) break;
     }
     if (run.status !== "SUCCEEDED" && items.length === 0) {
-      await this.ledger.finished(key, { status: run.status, items: 0, costUsd: run.usageTotalUsd ?? 0 });
-      throw new Error(`${actor} \u8FD0\u884C\u5931\u8D25\uFF08${run.status}\uFF09\uFF0Crun ${record.runId}`);
+      await this.ledger.forget(key);
+      throw new Error(`${actor} \u8FD0\u884C\u5931\u8D25\uFF08${run.status}\uFF09\uFF0Crun ${record.runId}\u3002\u7528\u540C\u4E00\u4E2A --job \u91CD\u8DD1\uFF0C\u8FD9\u4E00\u6B65\u4F1A\u91CD\u65B0\u542F\u52A8`);
     }
     const cost = Math.max(run.usageTotalUsd ?? 0, estimate(key, items.length));
     this.spent += cost;
@@ -60396,8 +60396,7 @@ function dedupe(creators) {
   for (const c of creators) merge(pool, c);
   return [...pool.values()];
 }
-async function igDiscover(api, seeds, keywords, perSeed, perKeyword) {
-  const pool = /* @__PURE__ */ new Map();
+async function igDiscover(api, seeds, keywords, perSeed, perKeyword, pool = /* @__PURE__ */ new Map()) {
   if (seeds.length) {
     const items = await api.run(
       "ig_related",
@@ -60666,11 +60665,12 @@ async function discover(api, p, skip = /* @__PURE__ */ new Set()) {
   const drop = (cs) => dedupe(cs).filter((c) => !skipped(c));
   const kept = (cs) => cs.filter((c) => keep(c, p)[0]);
   const worth = (cs) => cs.filter((c) => prefilter(c, p));
+  const found = /* @__PURE__ */ new Map();
   let creators = [];
   let stoppedEarly = "";
   try {
     if (p.platform === "instagram") {
-      creators = drop([...given, ...await igDiscover(api, p.seeds, p.keywords, p.perSeed, p.perKeyword)]);
+      creators = drop([...given, ...await igDiscover(api, p.seeds, p.keywords, p.perSeed, p.perKeyword, found)]);
       await igLookup(api, worth(creators));
       if (p.linkPages) await linkPagesLookup(api, kept(creators));
     } else if (p.platform === "youtube") {
@@ -60694,6 +60694,7 @@ async function discover(api, p, skip = /* @__PURE__ */ new Set()) {
   } catch (err) {
     if (!(err instanceof BudgetExceeded)) throw err;
     stoppedEarly = err.message;
+    if (!creators.length) creators = drop([...given, ...found.values()]);
   }
   const results = creators.map((creator) => {
     const [ok, reason] = keep(creator, p);
@@ -60852,6 +60853,10 @@ var FileLedger = class {
   }
   async finished(step, r) {
     this.data[step] = { ...this.data[step], status: r.status };
+    writeFileSync(this.file, JSON.stringify(this.data, null, 2));
+  }
+  async forget(step) {
+    delete this.data[step];
     writeFileSync(this.file, JSON.stringify(this.data, null, 2));
   }
 };
