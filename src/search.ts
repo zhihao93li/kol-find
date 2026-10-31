@@ -117,6 +117,10 @@ export class FileLedger implements RunLedger {
     this.data[step] = { ...this.data[step], status: r.status };
     writeFileSync(this.file, JSON.stringify(this.data, null, 2));
   }
+  async forget(step: string) {
+    delete this.data[step];
+    writeFileSync(this.file, JSON.stringify(this.data, null, 2));
+  }
 }
 
 /** APIFY_TOKEN, else ~/.kol-find/apify-token. */

@@ -61,9 +61,10 @@ export function dedupe(creators: Creator[]): Creator[] {
 
 // ---------------------------------------------------------------- Instagram
 
+/** `pool` fills as each search finishes, so the caller still has the first search's accounts if the budget stops the second. */
 export async function igDiscover(api: ActorRunner, seeds: string[], keywords: string[],
-                                 perSeed: number, perKeyword: number): Promise<Creator[]> {
-  const pool = new Map<string, Creator>();
+                                 perSeed: number, perKeyword: number,
+                                 pool: Map<string, Creator> = new Map()): Promise<Creator[]> {
   if (seeds.length) {
     const items = await api.run("ig_related", { username: seeds, maxItem: perSeed, enrichProfile: false },
                                 seeds.length * perSeed);

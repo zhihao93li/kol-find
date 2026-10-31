@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { ActorKey, ActorRunner, Item } from "../src/discovery/apify.js";
+import { ApifyRunner, type ActorKey, type ActorRunner, type Item } from "../src/discovery/apify.js";
 import { DEFAULT_PARAMS } from "../src/discovery/run.js";
 import type { DomainCheck } from "../src/mailcheck.js";
 import { checkJob, FileLedger, handleOf, params, search, toCsv, type SearchOpts } from "../src/search.js";
@@ -118,5 +118,30 @@ describe("kol-find", () => {
     const dir = join(mkdtempSync(join(tmpdir(), "kolfind-")), "job");
     await new FileLedger(dir).started("ig_search", "actor", { runId: "r1", datasetId: "d1" });
     expect(await new FileLedger(dir).find("ig_search")).toEqual({ runId: "r1", datasetId: "d1" });
+  });
+
+  it("starts a failed step again on a re-run, and keeps a run that stopped with results", async () => {
+    const dir = join(mkdtempSync(join(tmpdir(), "kolfind-")), "job");
+    const runs: { status: string; items: Item[] }[] = [
+      { status: "FAILED", items: [] },
+      { status: "SUCCEEDED", items: [{ username: "a" }] },
+      { status: "ABORTED", items: [{ username: "b" }] },
+    ];
+    let started = 0;
+    const client = {
+      actor: () => ({ start: async () => ({ id: String(started), defaultDatasetId: String(started++) }) }),
+      run: (id: string) => ({ waitForFinish: async () => ({ status: runs[Number(id)].status }) }),
+      dataset: (id: string) => ({ listItems: async () => ({ items: runs[Number(id)].items }) }),
+    };
+    const rerun = () => Object.assign(new ApifyRunner("token", 2, new FileLedger(dir)), { client });
+
+    await expect(rerun().run("ig_search", {}, 1)).rejects.toThrow("运行失败");
+    expect(await rerun().run("ig_search", {}, 1)).toEqual([{ username: "a" }]);
+    expect(await rerun().run("ig_search", {}, 1)).toEqual([{ username: "a" }]);
+    expect(started).toBe(2);
+
+    expect(await rerun().run("ig_email", {}, 1)).toEqual([{ username: "b" }]);
+    expect(await rerun().run("ig_email", {}, 1)).toEqual([{ username: "b" }]);
+    expect(started).toBe(3);
   });
 });
